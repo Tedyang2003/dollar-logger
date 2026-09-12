@@ -121,6 +121,9 @@
       <button type="button" class="ghost" id="apiSyncNow">Sync now</button>
     </div>
 
+    <h2 class="section-h">Subscriptions</h2>
+    <ul class="entries" id="subList"></ul>
+
     <h2 class="section-h">Export</h2>
     <p class="muted small">Downloads a CSV you can open in Excel or Google Sheets.</p>
     <div class="stack">
@@ -214,6 +217,16 @@
     <div class="field">
       <label class="lbl">Category</label>
       <div class="chips" id="catChips"></div>
+    </div>
+
+    <div class="field">
+      <label class="lbl">Repeat</label>
+      <div class="chips" id="repeatChips">
+        <button type="button" class="chip on" data-repeat="">Never</button>
+        <button type="button" class="chip" data-repeat="weekly">Weekly</button>
+        <button type="button" class="chip" data-repeat="monthly">Monthly</button>
+        <button type="button" class="chip" data-repeat="yearly">Yearly</button>
+      </div>
     </div>
 
 

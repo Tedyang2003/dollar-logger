@@ -59,6 +59,7 @@ window.DollarApi = (function () {
       amount: row.amount_cents / 100,
       category: row.category || 'Other',
       item: row.item || '',
+      subscription_id: row.subscription_id || null,
       merchant: row.merchant || '',
       created: row.created_at || ''
     };
@@ -209,6 +210,14 @@ window.DollarApi = (function () {
     },
 
     syncNow: runSync,
+
+    subscriptions: function (method, path, body) {
+      return request('/subscriptions' + (path || ''), {
+        method: method,
+        headers: body ? { 'Content-Type': 'application/json' } : {},
+        body: body ? JSON.stringify(body) : undefined
+      });
+    },
 
     /* Sends a receipt photo for reading. Returns a draft to pre-fill the form;
        never saves anything. */

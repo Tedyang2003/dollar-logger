@@ -20,6 +20,7 @@
   var ui = {
     view: 'log',
     day: null,     // 'YYYY-MM-DD' currently shown in the Log tab
+    repeat: '',    // '' | weekly | monthly | yearly, for the add sheet
     cat: null,     // selected category on the log form
     month: null,   // Date pinned to the 1st of the shown month
     year: null     // Number
@@ -265,7 +266,9 @@
     li.appendChild(badge);
 
     var meta = el('div', 'meta');
-    meta.appendChild(el('div', 'item', e.item || e.note || e.category || 'Purchase'));
+    var head = el('div', 'item', e.item || e.note || e.category || 'Purchase');
+    if (e.subscription_id) head.appendChild(el('span', 'sub-tag', '↻ repeats'));
+    meta.appendChild(head);
     meta.appendChild(el('span', 'cat', e.merchant ? (e.merchant + ' · ' + (e.category || 'Other')) : (e.category || 'Other')));
 
     var del = el('button', 'del', '×');
@@ -439,6 +442,27 @@
 
     var item = $('item').value.trim();
     if (!item) { toast('What did you buy?'); $('item').focus(); return; }
+
+    /* A repeating purchase is created on the server, which logs this and every
+       future charge itself - so nothing is written locally here, and the entry
+       arrives with the next sync. That needs a connection. */
+    if (ui.repeat) {
+      if (!window.DollarApi || navigator.onLine === false) { toast('Repeating purchases need a connection.'); return; }
+      var btn = $('addBtn'); btn.disabled = true;
+      window.DollarApi.subscriptions('POST', '', {
+        item: item, merchant: $('merchant').value.trim(), category: ui.cat || 'Other',
+        amount_cents: Math.round(amount * 100), interval: ui.repeat,
+        anchor_date: $('date').value || todayKey(),
+        tz: (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC')
+      }).then(function () {
+        closeSheet();
+        toast('Repeats ' + ui.repeat + ' from ' + prettyDay($('date').value || todayKey()) + '.');
+        return window.DollarApi.syncNow();
+      }).then(renderSubs).catch(function () {
+        toast('Could not save the subscription. Try again.');
+      }).then(function () { btn.disabled = false; });
+      return;
+    }
 
     var date = $('date').value || todayKey();
 
@@ -648,6 +672,42 @@
       });
   }
 
+  /* ============================ subscriptions ============================ */
+
+  function setRepeat(v) {
+    ui.repeat = v;
+    Array.prototype.forEach.call(document.querySelectorAll('[data-repeat]'), function (b) {
+      b.classList.toggle('on', b.getAttribute('data-repeat') === v);
+    });
+  }
+
+  function renderSubs() {
+    var host = $('subList');
+    if (!host || !window.DollarApi || !(window.DollarAuth && window.DollarAuth.isSignedIn())) return;
+    window.DollarApi.subscriptions('GET').then(function (body) {
+      host.innerHTML = '';
+      var list = (body && body.subscriptions) || [];
+      if (!list.length) { host.appendChild(el('li', 'empty', 'No repeating purchases. Pick Repeat when adding one.')); return; }
+      list.forEach(function (s) {
+        var li = el('li', 'entry');
+        var badge = el('div', 'cat-badge'); badge.appendChild(catIcon(s.category)); li.appendChild(badge);
+        var meta = el('div', 'meta');
+        meta.appendChild(el('div', 'item', s.item));
+        meta.appendChild(el('span', 'cat', s.interval.charAt(0).toUpperCase() + s.interval.slice(1) + ' · next ' + prettyDay(s.next_date)));
+        li.appendChild(meta);
+        li.appendChild(el('span', 'amt', money(s.amount_cents / 100)));
+        var x = el('button', 'del', '×'); x.type = 'button'; x.setAttribute('aria-label', 'Cancel subscription');
+        x.addEventListener('click', function () {
+          if (!confirm('Stop "' + s.item + '" repeating? Charges already logged stay.')) return;
+          window.DollarApi.subscriptions('DELETE', '/' + s.id).then(function () { toast('Cancelled.'); renderSubs(); })
+            .catch(function () { toast('Could not cancel. Try again.'); });
+        });
+        li.appendChild(x);
+        host.appendChild(li);
+      });
+    }).catch(function () { /* offline: leave the list as it was */ });
+  }
+
   /* ============================ add sheet ============================ */
 
   var sheetOpen = false;
@@ -663,6 +723,7 @@
     $('item').value = '';
     $('merchant').value = '';
     ['amount', 'item', 'merchant'].forEach(function (id) { $(id).classList.remove('filled'); });
+    setRepeat('');
     $('amountPicks').classList.add('hidden');
     renderCatChips();
 
@@ -1067,7 +1128,7 @@
     if (ui.view === 'log') renderLog();
     if (ui.view === 'month') renderMonth();
     if (ui.view === 'year') renderYear();
-    if (ui.view === 'data') renderData();
+    if (ui.view === 'data') { renderData(); renderSubs(); }
   }
 
   /* ============================ wiring ============================ */
@@ -1087,6 +1148,9 @@
     // --- add sheet ---
     $('fabAdd').addEventListener('click', openSheet);
     $('scanInput').addEventListener('change', onScan);
+    Array.prototype.forEach.call(document.querySelectorAll('[data-repeat]'), function (b) {
+      b.addEventListener('click', function () { setRepeat(b.getAttribute('data-repeat')); });
+    });
     $('sheetCancel').addEventListener('click', closeSheet);
     $('scrim').addEventListener('click', closeSheet);
 

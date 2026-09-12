@@ -493,6 +493,10 @@ body.gated{overflow:hidden}
 }
 .day-total strong{font-size:1.35rem}
 
+/* ---------- subscriptions ---------- */
+.sub-tag{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 7px;
+  border-radius:99px;background:var(--accent-soft);color:var(--accent);font-size:.7rem;font-weight:600}
+
 /* ---------- receipt scan ---------- */
 .amount-picks{display:flex;flex-wrap:wrap;gap:6px;margin:-6px 0 14px}
 .amount-picks .lbl{width:100%;margin:0 0 2px}

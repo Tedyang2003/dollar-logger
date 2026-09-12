@@ -15,6 +15,10 @@ database_id = "df6ac5d4-0620-4a9d-b916-cdad7c8eedd9"
 [ai]
 binding = "AI"
 
+# Hourly: logs subscription charges as they come due, in each user's time zone.
+[triggers]
+crons = ["0 * * * *"]
+
 [vars]
 GOOGLE_CLIENT_ID = "530673590797-5m85o2agsr8n5ssol738fsf8u3ebrqo8.apps.googleusercontent.com"
 # Production only. Local dev gets localhost from .dev.vars, which overrides

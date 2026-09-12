@@ -13,9 +13,15 @@
 
 import { verifyGoogleIdToken, AuthError, usingTestKeys } from './auth.js';
 import { scanReceipt } from './receipt.js';
+import { generateDue, createSubscription, listSubscriptions, cancelSubscription } from './subs.js';
 import { issueSession, verifySession, revokeSessions, SessionError } from './session.js';
 
 export default {
+  // Cron trigger: log any subscription charges that have come due.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(generateDue(env).then(n => console.log('subscriptions: created', n)));
+  },
+
   async fetch(request, env) {
     const url = new URL(request.url);
 
@@ -74,6 +80,17 @@ export default {
       if (url.pathname === '/session' && request.method === 'DELETE') {
         await revokeSessions(user.sub, env.DB);
         return ctx.json({ signed_out: true });
+      }
+
+      if (url.pathname === '/subscriptions' && request.method === 'POST') {
+        return await createSubscription(request, env, ctx, user);
+      }
+      if (url.pathname === '/subscriptions' && request.method === 'GET') {
+        return await listSubscriptions(env, ctx, user);
+      }
+      const subDel = url.pathname.match(/^\/subscriptions\/([A-Za-z0-9]{1,40})$/);
+      if (subDel && request.method === 'DELETE') {
+        return await cancelSubscription(subDel[1], env, ctx, user);
       }
 
       if (url.pathname === '/receipts' && request.method === 'POST') {
@@ -422,6 +439,7 @@ function toApi(row) {
     category: row.category,
     item: row.item,
     merchant: row.merchant,
+    subscription_id: row.subscription_id || null,
     created_at: row.created_at,
     updated_at: row.updated_at
   };
