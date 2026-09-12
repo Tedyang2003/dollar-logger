@@ -1136,8 +1136,30 @@
     setView('log');
 
     if ('serviceWorker' in navigator) {
+      /* Was a worker already driving this page? On a first-ever visit there is
+         none, and the reload below would be pointless churn. */
+      var hadController = !!navigator.serviceWorker.controller;
+      var reloading = false;
+
+      // Fires when a newly installed worker takes over. At that moment the old
+      // files are stale, so pick up the new ones rather than leaving a half-old
+      // page on screen.
+      navigator.serviceWorker.addEventListener('controllerchange', function () {
+        if (!hadController || reloading) return;
+        reloading = true;
+        location.reload();
+      });
+
       window.addEventListener('load', function () {
-        navigator.serviceWorker.register('sw.js').catch(function () { /* offline support is optional */ });
+        navigator.serviceWorker.register('sw.js').then(function (reg) {
+          reg.update();
+          // Phones can stay open for days; check again occasionally.
+          setInterval(function () { reg.update(); }, 60 * 60 * 1000);
+          // And whenever you come back to the app.
+          document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) reg.update();
+          });
+        }).catch(function () { /* offline support is optional */ });
       });
     }
   }
