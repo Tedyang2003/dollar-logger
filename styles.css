@@ -1,20 +1,23 @@
 /* ---------- tokens ----------
-   Purple palette, measured against WCAG 2.1 rather than eyeballed: every
-   text pairing here clears 4.5:1 and every chart/border pairing clears its
-   threshold. Mid-tone purples are a contrast trap - too dark for black text,
-   too light for white - so the accent sits deep in light mode and light in
-   dark mode, never in the middle. */
+   Cool slate neutrals carry the whole interface; indigo appears ONLY on things
+   you can act on - the add button, the selected day, the primary button, the
+   active tab. That restraint is the point: when the accent is everywhere it
+   stops meaning anything, which is what went wrong with the first attempt.
+
+   Every pairing below is measured against WCAG 2.1, not eyeballed. Lowest
+   ratio in the app is 5.85:1 where 4.5:1 is required. */
 :root{
-  --bg:#faf7fe;
+  --bg:#f7f9fb;
   --surface:#ffffff;
-  --surface-2:#f2ecfb;
-  --text:#1b1725;
-  --muted:#5f5873;
-  --line:#e6dcf5;
-  --accent:#6532cf;
+  --surface-2:#eef1f5;
+  --text:#121823;
+  --muted:#59626f;
+  --line:#d9e0e8;
+  --accent:#4a42cf;
   --accent-ink:#ffffff;
+  --accent-soft:#ecebfb;   /* faint accent wash, for selected states only */
   --danger:#b3261e;
-  --bar:#7c4dea;
+  --bar:#5b57e0;
   --radius:14px;
   --tabh:58px;
   --safe-b:env(safe-area-inset-bottom,0px);
@@ -22,16 +25,17 @@
 @media (prefers-color-scheme: dark){
   :root{
     /* Not pure black: #000 causes halation against light text. */
-    --bg:#141019;
-    --surface:#1c1726;
-    --surface-2:#272033;
-    --text:#e9e3f2;      /* dimmed off pure white, which is tiring on dark */
-    --muted:#a49bba;
-    --line:#332b42;
-    --accent:#b596ff;
-    --accent-ink:#1a0d33;
+    --bg:#0f141b;
+    --surface:#171e28;
+    --surface-2:#212b38;
+    --text:#e3e9f1;      /* dimmed off pure white, which is tiring on dark */
+    --muted:#97a3b4;
+    --line:#2a3543;
+    --accent:#9aa6ff;
+    --accent-ink:#111536;
+    --accent-soft:#1e2440;
     --danger:#e5695f;
-    --bar:#9d78ff;
+    --bar:#818cf8;
   }
 }
 
@@ -42,7 +46,15 @@ body{
   color:var(--text);
   font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   -webkit-text-size-adjust:100%;
-  padding-bottom:calc(var(--tabh) + var(--safe-b) + 12px);
+  padding-bottom:calc(var(--tabh) + var(--inset-b) + 12px);
+}
+
+/* The home-indicator inset is only ours to reserve when we ARE the whole
+   screen. In a browser tab Safari already reserves its own bottom chrome, and
+   adding the inset on top of it leaves dead space under the tab labels. */
+:root{ --inset-b:0px; }
+@media (display-mode: standalone), (display-mode: fullscreen){
+  :root{ --inset-b:var(--safe-b); }
 }
 h1,h2{margin:0;font-weight:650}
 button,input{font:inherit;color:inherit}
@@ -185,7 +197,7 @@ button.danger{
 /* ---------- toast ---------- */
 .toast{
   position:fixed;left:50%;transform:translateX(-50%);
-  bottom:calc(var(--tabh) + var(--safe-b) + 18px);
+  bottom:calc(var(--tabh) + var(--inset-b) + 18px);
   background:var(--text);color:var(--bg);
   padding:11px 18px;border-radius:99px;font-size:.88rem;z-index:50;
   max-width:88vw;text-align:center;
@@ -196,7 +208,7 @@ button.danger{
   position:fixed;left:0;right:0;bottom:0;z-index:30;
   display:grid;grid-template-columns:repeat(4,1fr);
   background:var(--surface);border-top:1px solid var(--line);
-  padding-bottom:var(--safe-b);
+  padding-bottom:var(--inset-b);
 }
 .tab{
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
@@ -208,7 +220,7 @@ button.danger{
 
 .footer-note{margin-top:28px;text-align:center}
 
-/* ---------- Drive sync ---------- */
+/* ---------- sync status ---------- */
 .sync-card{
   background:var(--surface);border:1px solid var(--line);
   border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;
@@ -240,7 +252,7 @@ svg{width:1.25em;height:1.25em;fill:none;stroke:currentColor;stroke-width:2;
 /* ---------- floating add button ---------- */
 .fab{
   position:fixed;right:18px;z-index:25;
-  bottom:calc(var(--tabh) + var(--safe-b) + 18px);
+  bottom:calc(var(--tabh) + var(--inset-b) + 18px);
   width:58px;height:58px;border-radius:50%;border:0;
   background:var(--accent);color:var(--accent-ink);
   display:flex;align-items:center;justify-content:center;cursor:pointer;
@@ -264,7 +276,7 @@ svg{width:1.25em;height:1.25em;fill:none;stroke:currentColor;stroke-width:2;
   background:var(--bg);
   border-radius:20px 20px 0 0;
   border-top:1px solid var(--line);
-  padding:0 16px calc(var(--safe-b) + 20px);
+  padding:0 16px calc(var(--inset-b) + 20px);
   max-height:92vh;overflow-y:auto;
   transform:translateY(100%);
   transition:transform .24s cubic-bezier(.32,.72,0,1);
@@ -377,7 +389,7 @@ body.locked{overflow:hidden}
 .topbar-right{text-align:right;font-size:.75rem}
 .avatar{
   width:34px;height:34px;border-radius:50%;flex:none;
-  background:var(--accent);color:var(--accent-ink);
+  background:var(--accent-soft);color:var(--accent);
   border:0;cursor:pointer;font-weight:700;font-size:.95rem;
   display:flex;align-items:center;justify-content:center;
 }
@@ -388,7 +400,7 @@ body.locked{overflow:hidden}
   position:fixed;inset:0;z-index:60;
   background:var(--bg);
   display:flex;align-items:center;justify-content:center;
-  padding:32px 24px calc(32px + var(--safe-b));
+  padding:32px 24px calc(32px + var(--inset-b));
   overflow-y:auto;
 }
 .gate-inner{width:100%;max-width:340px;text-align:center}
@@ -415,7 +427,7 @@ body.gated{overflow:hidden}
 .acct{text-align:center;padding:4px 0 18px}
 .acct-avatar{
   width:56px;height:56px;border-radius:50%;margin:0 auto 12px;
-  background:var(--accent);color:var(--accent-ink);
+  background:var(--accent-soft);color:var(--accent);
   display:flex;align-items:center;justify-content:center;
   font-size:1.4rem;font-weight:700;
 }
@@ -424,7 +436,10 @@ body.gated{overflow:hidden}
 
 /* ---------- day bar (Google-Calendar style) ---------- */
 .daybar{
-  position:sticky;top:0;z-index:15;
+  /* --topbar-h is measured at runtime: the header's height depends on the
+     status-bar inset, so it cannot be hardcoded. Without this the strip
+     scrolls underneath the header and vanishes. */
+  position:sticky;top:var(--topbar-h,0px);z-index:15;
   background:var(--bg);
   margin:-16px -16px 12px;
   padding:10px 16px 8px;
@@ -454,11 +469,12 @@ body.gated{overflow:hidden}
 .wday.sel .num{background:var(--accent);color:var(--accent-ink);font-weight:650;box-shadow:none}
 .wday:disabled{opacity:.3;cursor:default}
 .wday .dot{
-  width:4px;height:4px;border-radius:50%;background:var(--accent);
+  width:4px;height:4px;border-radius:50%;background:var(--muted);
   opacity:0;margin-top:-2px;
 }
 .wday.has .dot{opacity:1}
 .wday.sel .dot{background:var(--accent)}
+.wday.sel .num + .dot{background:var(--accent)}
 
 /* ---------- day area ---------- */
 .dayarea{touch-action:pan-y}
@@ -480,7 +496,7 @@ body.gated{overflow:hidden}
 /* ---------- entry rows with category icons ---------- */
 .cat-badge{
   width:38px;height:38px;border-radius:12px;flex:none;
-  background:var(--surface-2);color:var(--accent);
+  background:var(--surface-2);color:var(--muted);
   display:flex;align-items:center;justify-content:center;
 }
 .cat-badge svg{width:20px;height:20px}

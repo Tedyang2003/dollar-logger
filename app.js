@@ -945,6 +945,16 @@
     }
   }
 
+  /* The header's height depends on the status-bar inset, which differs between
+     a browser tab and an installed app, so the week strip cannot be given a
+     hardcoded offset to stick below. Measure it and hand it to CSS. */
+  function measureHeader() {
+    var bar = $('topbar');
+    if (!bar) return;
+    var h = bar.offsetHeight;
+    if (h > 0) document.documentElement.style.setProperty('--topbar-h', h + 'px');
+  }
+
   /* ============================ views ============================ */
 
   var TITLES = { log: 'Log', month: 'Month', year: 'Year', data: 'Data' };
@@ -1131,6 +1141,9 @@
       toast('All entries deleted.');
     });
 
+    measureHeader();
+    window.addEventListener('resize', measureHeader);
+    window.addEventListener('orientationchange', measureHeader);
     initAuth();
     initApi();
     setView('log');
