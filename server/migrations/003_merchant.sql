@@ -1,0 +1,1 @@
+ALTER TABLE entries ADD COLUMN merchant TEXT NOT NULL DEFAULT '';

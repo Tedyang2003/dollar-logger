@@ -47,7 +47,8 @@ window.DollarApi = (function () {
       date: entry.date,
       amount_cents: Math.round(entry.amount * 100),
       category: entry.category || 'Other',
-      item: entry.item || ''
+      item: entry.item || '',
+      merchant: entry.merchant || ''
     };
   }
 
@@ -58,6 +59,7 @@ window.DollarApi = (function () {
       amount: row.amount_cents / 100,
       category: row.category || 'Other',
       item: row.item || '',
+      merchant: row.merchant || '',
       created: row.created_at || ''
     };
   }

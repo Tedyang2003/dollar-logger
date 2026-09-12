@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS entries (
   amount_cents  INTEGER NOT NULL CHECK (amount_cents > 0),
   category      TEXT NOT NULL,
   item          TEXT NOT NULL DEFAULT '',   -- what was bought
+  merchant      TEXT NOT NULL DEFAULT '',   -- where, optional
 
   receipt_id    TEXT,                     -- reserved: filled in when scanning lands
 

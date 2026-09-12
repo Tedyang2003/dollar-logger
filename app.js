@@ -266,7 +266,7 @@
 
     var meta = el('div', 'meta');
     meta.appendChild(el('div', 'item', e.item || e.note || e.category || 'Purchase'));
-    meta.appendChild(el('span', 'cat', e.category || 'Other'));
+    meta.appendChild(el('span', 'cat', e.merchant ? (e.merchant + ' · ' + (e.category || 'Other')) : (e.category || 'Other')));
 
     var del = el('button', 'del', '×');
     del.type = 'button';
@@ -448,12 +448,14 @@
       amount: amount,
       category: ui.cat || 'Other',
       item: item,
+      merchant: $('merchant').value.trim(),
       created: new Date().toISOString()
     });
     save();
 
     $('amount').value = '';
     $('item').value = '';
+    $('merchant').value = '';
     closeSheet();
     if (ui.view === 'log') ui.day = date;
     renderAll();
@@ -575,6 +577,7 @@
     setDate(ui.day && ui.day <= todayKey() ? ui.day : todayKey());
     $('amount').value = '';
     $('item').value = '';
+    $('merchant').value = '';
     renderCatChips();
 
     $('scrim').classList.remove('hidden');
@@ -703,13 +706,13 @@
   }
 
   function toCsv(list) {
-    var rows = [['Date', 'Year', 'Month', 'Item', 'Category', 'Amount']];
+    var rows = [['Date', 'Year', 'Month', 'Item', 'Merchant', 'Category', 'Amount']];
     list.slice()
       .sort(function (a, b) { return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); })
       .forEach(function (e) {
         var d = fromKey(e.date);
         rows.push([e.date, d.getFullYear(), MONTHS[d.getMonth()],
-                   e.item || '', e.category || 'Other', e.amount.toFixed(2)]);
+                   e.item || '', e.merchant || '', e.category || 'Other', e.amount.toFixed(2)]);
       });
     return rows.map(function (r) { return r.map(csvCell).join(','); }).join('\r\n');
   }

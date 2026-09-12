@@ -201,10 +201,10 @@ async function createEntry(request, env, ctx, user) {
   // ON CONFLICT DO NOTHING makes a retry harmless: if the phone resends after a
   // dropped connection, the same id arrives and we do not create a second row.
   const res = await env.DB.prepare(
-    `INSERT INTO entries (id, user_id, date, amount_cents, category, item)
-     VALUES (?, ?, ?, ?, ?, ?)
+    `INSERT INTO entries (id, user_id, date, amount_cents, category, item, merchant)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO NOTHING`
-  ).bind(id, userId, e.date, e.amount_cents, e.category, e.item).run();
+  ).bind(id, userId, e.date, e.amount_cents, e.category, e.item, e.merchant).run();
 
   const row = await env.DB.prepare(
     'SELECT * FROM entries WHERE id = ? AND user_id = ?'
@@ -381,12 +381,15 @@ function validateEntry(b) {
   if (!item) return { field: 'item', error: 'required' };
   if (item.length > 100) return { field: 'item', error: 'max 100 characters' };
 
+  const merchant = typeof b.merchant === 'string' ? b.merchant.trim() : '';
+  if (merchant.length > 60) return { field: 'merchant', error: 'max 60 characters' };
+
   const id = typeof b.id === 'string' ? b.id.trim() : '';
   if (id && !/^[A-Za-z0-9_-]{1,64}$/.test(id)) {
     return { field: 'id', error: 'must be 1-64 chars of A-Z a-z 0-9 _ -' };
   }
 
-  return { value: { id: id, date: b.date, amount_cents: b.amount_cents, category: category, item: item } };
+  return { value: { id: id, date: b.date, amount_cents: b.amount_cents, category: category, item: item, merchant: merchant } };
 }
 
 // Right shape AND a day that exists.
@@ -413,6 +416,7 @@ function toApi(row) {
     amount_cents: row.amount_cents,
     category: row.category,
     item: row.item,
+    merchant: row.merchant,
     created_at: row.created_at,
     updated_at: row.updated_at
   };
