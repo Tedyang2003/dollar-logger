@@ -1,0 +1,16 @@
+{
+  "name": "dollar-logger-api",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev --port 8787",
+    "dev:test": "wrangler dev --port 8787 --var GOOGLE_JWKS_URL:http://127.0.0.1:9999/certs",
+    "deploy": "wrangler deploy",
+    "db:local": "wrangler d1 execute dollar-logger --local --file=./schema.sql",
+    "db:remote": "wrangler d1 execute dollar-logger --remote --file=./schema.sql",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

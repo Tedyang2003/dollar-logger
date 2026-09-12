@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111417">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Dollar Logger">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="stylesheet" href="styles.css">
+<title>Dollar Logger</title>
+</head>
+<body>
+
+<header class="topbar">
+  <h1 id="screenTitle">Log</h1>
+  <div class="topbar-right" id="topbarRight"></div>
+</header>
+
+<main id="main">
+
+  <!-- ========== LOG ========== -->
+  <section class="view" id="view-log">
+    <form id="entryForm" autocomplete="off">
+      <div class="amount-row">
+        <span class="cur" id="curSign">$</span>
+        <input id="amount" type="text" inputmode="decimal" placeholder="0.00" aria-label="Amount">
+      </div>
+
+      <div class="field">
+        <label class="lbl">Date</label>
+        <div class="date-row">
+          <button type="button" class="chip" data-dayshift="0">Today</button>
+          <button type="button" class="chip" data-dayshift="1">Yesterday</button>
+          <input id="date" type="date" aria-label="Date">
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="lbl">Category</label>
+        <div class="chips" id="catChips"></div>
+      </div>
+
+      <div class="field">
+        <label class="lbl" for="note">Note <span class="muted">(optional)</span></label>
+        <input id="note" type="text" placeholder="e.g. groceries, bus fare">
+      </div>
+
+      <button type="submit" class="primary" id="addBtn">Add purchase</button>
+    </form>
+
+    <div class="today-strip">
+      <span>Today</span>
+      <strong id="todayTotal">$0.00</strong>
+    </div>
+
+    <h2 class="section-h">Recent</h2>
+    <ul class="entries" id="recentList"></ul>
+  </section>
+
+  <!-- ========== MONTH ========== -->
+  <section class="view hidden" id="view-month">
+    <div class="period-nav">
+      <button type="button" class="nav-btn" id="monthPrev" aria-label="Previous month">&#8249;</button>
+      <div class="period-label" id="monthLabel">—</div>
+      <button type="button" class="nav-btn" id="monthNext" aria-label="Next month">&#8250;</button>
+    </div>
+
+    <div class="total-card">
+      <span class="muted">Total spent</span>
+      <strong id="monthTotal">$0.00</strong>
+      <span class="sub muted" id="monthSub">—</span>
+    </div>
+
+    <h2 class="section-h">By category</h2>
+    <div id="monthCats" class="bars"></div>
+
+    <h2 class="section-h">By day</h2>
+    <div id="monthDays" class="daylist"></div>
+  </section>
+
+  <!-- ========== YEAR ========== -->
+  <section class="view hidden" id="view-year">
+    <div class="period-nav">
+      <button type="button" class="nav-btn" id="yearPrev" aria-label="Previous year">&#8249;</button>
+      <div class="period-label" id="yearLabel">—</div>
+      <button type="button" class="nav-btn" id="yearNext" aria-label="Next year">&#8250;</button>
+    </div>
+
+    <div class="total-card">
+      <span class="muted">Total spent</span>
+      <strong id="yearTotal">$0.00</strong>
+      <span class="sub muted" id="yearSub">—</span>
+    </div>
+
+    <h2 class="section-h">By month</h2>
+    <div class="yearchart" id="yearChart"></div>
+
+    <h2 class="section-h">By category</h2>
+    <div id="yearCats" class="bars"></div>
+  </section>
+
+  <!-- ========== DATA ========== -->
+  <section class="view hidden" id="view-data">
+    <h2 class="section-h">Account</h2>
+    <div class="sync-card">
+      <div class="sync-row">
+        <span class="sync-dot" id="authDot"></span>
+        <span id="authStatus">Not signed in</span>
+      </div>
+      <div id="googleBtn" class="gbtn"></div>
+      <p class="muted small" id="authHelp">Sign in so your entries reach your own server.</p>
+    </div>
+    <div class="stack">
+      <button type="button" class="ghost hidden" id="signOutBtn">Sign out</button>
+    </div>
+
+    <h2 class="section-h">Server sync</h2>
+    <div class="sync-card">
+      <div class="sync-row">
+        <span class="sync-dot" id="apiDot"></span>
+        <span id="apiStatus">Not set up</span>
+      </div>
+      <p class="muted small" id="apiHelp">Syncs every entry to your own server.</p>
+    </div>
+    <div class="stack">
+      <button type="button" class="ghost" id="apiSyncNow">Sync now</button>
+    </div>
+
+    <h2 class="section-h">Google Drive</h2>
+    <div class="sync-card">
+      <div class="sync-row">
+        <span class="sync-dot" id="syncDot"></span>
+        <span id="driveStatus">Not connected</span>
+      </div>
+      <p class="muted small" id="driveHelp">Backs up every entry to a single file in your Drive, seconds after you log it.</p>
+    </div>
+    <div class="stack">
+      <button type="button" class="primary" id="driveConnect">Connect Google Drive</button>
+      <button type="button" class="ghost hidden" id="driveSyncNow">Sync now</button>
+      <button type="button" class="ghost hidden" id="driveDisconnect">Disconnect</button>
+    </div>
+
+    <h2 class="section-h">Export</h2>
+    <p class="muted small">Downloads a CSV you can open in Excel or Google Sheets.</p>
+    <div class="stack">
+      <button type="button" class="primary" id="exportAll">Export everything (CSV)</button>
+      <button type="button" class="ghost" id="exportMonth">Export this month (CSV)</button>
+      <button type="button" class="ghost" id="exportYear">Export this year (CSV)</button>
+      <button type="button" class="ghost" id="copyCsv">Copy CSV to clipboard</button>
+    </div>
+
+    <h2 class="section-h">Backup</h2>
+    <p class="muted small">Entries live in this browser only. A backup file restores them on a new phone or after clearing browsing data.</p>
+    <div class="stack">
+      <button type="button" class="ghost" id="backupBtn">Download backup (JSON)</button>
+      <label class="ghost filelabel">Restore from backup<input type="file" id="restoreInput" accept="application/json,.json" hidden></label>
+    </div>
+
+    <h2 class="section-h">Settings</h2>
+    <div class="field">
+      <label class="lbl" for="currency">Currency symbol</label>
+      <input id="currency" type="text" maxlength="3" style="max-width:6rem">
+    </div>
+    <div class="field">
+      <label class="lbl">Categories</label>
+      <div class="chips" id="catEditor"></div>
+      <button type="button" class="ghost small-btn" id="addCat">+ Add category</button>
+    </div>
+
+    <h2 class="section-h danger-h">Danger zone</h2>
+    <div class="stack">
+      <button type="button" class="danger" id="wipeBtn">Delete all entries</button>
+    </div>
+
+    <p class="muted small footer-note">
+      <span id="statLine">—</span>
+    </p>
+  </section>
+
+</main>
+
+<nav class="tabbar">
+  <button type="button" class="tab active" data-view="log"><span class="ic">+</span><span>Log</span></button>
+  <button type="button" class="tab" data-view="month"><span class="ic">▦</span><span>Month</span></button>
+  <button type="button" class="tab" data-view="year"><span class="ic">▤</span><span>Year</span></button>
+  <button type="button" class="tab" data-view="data"><span class="ic">⤓</span><span>Data</span></button>
+</nav>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="config.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="signin.js"></script>
+<script src="drive.js"></script>
+<script src="api.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

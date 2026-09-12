@@ -1,0 +1,24 @@
+name = "dollar-logger-api"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+# Filled in after you run: npx wrangler d1 create dollar-logger
+[[d1_databases]]
+binding = "DB"                 # how the code refers to it: env.DB
+database_name = "dollar-logger"
+database_id = "df6ac5d4-0620-4a9d-b916-cdad7c8eedd9"
+
+# Switching to Google sign-in removed every server-side secret: a client ID is
+# public by design and so is a list of allowed origins. Public config belongs in
+# here, where it is versioned and reviewable, not hidden in a secret store.
+[vars]
+GOOGLE_CLIENT_ID = "530673590797-5m85o2agsr8n5ssol738fsf8u3ebrqo8.apps.googleusercontent.com"
+# Production only. Local dev gets localhost from .dev.vars, which overrides
+# this - so the deployed API never has to trust a dev machine.
+# Lowercase: GitHub serves Pages at the lowercased username.
+ALLOWED_ORIGIN = "https://tedyang2003.github.io"
+
+# The one value worth keeping out of the repo is your own email address:
+#   npx wrangler secret put ALLOWED_EMAILS
+# Leave it unset and anyone with a Google account can sign in and get their own
+# separate data. Set it and only the listed addresses may sign in at all.
