@@ -593,10 +593,32 @@
       $(id).value = v; $(id).classList.add('filled'); filled++;
     }
     put('amount', d.amount_cents ? (d.amount_cents / 100).toFixed(2) : null);
+    showAmountPicks(d.amounts || [], d.amount_cents);
     put('item', d.item);
     put('merchant', d.merchant);
     if (d.date) { setDate(d.date); filled++; }
     return filled;
+  }
+
+  /* Every amount the model read, as tappable chips. If the automatic pick is
+     wrong (a subtotal instead of the total), one tap fixes it. */
+  function showAmountPicks(list, chosen) {
+    var box = $('amountPicks');
+    box.innerHTML = '';
+    if (list.length < 2) { box.classList.add('hidden'); return; }
+    box.appendChild(el('span', 'lbl', 'Amounts on the receipt - tap the one you paid'));
+    list.forEach(function (a) {
+      var b = el('button', 'pick' + (a.cents === chosen ? ' on' : ''));
+      b.type = 'button';
+      b.appendChild(document.createTextNode(a.label || 'Amount'));
+      b.appendChild(el('b', null, money(a.cents / 100)));
+      b.addEventListener('click', function () {
+        $('amount').value = (a.cents / 100).toFixed(2);
+        showAmountPicks(list, a.cents);
+      });
+      box.appendChild(b);
+    });
+    box.classList.remove('hidden');
   }
 
   function onScan(e) {
@@ -641,6 +663,7 @@
     $('item').value = '';
     $('merchant').value = '';
     ['amount', 'item', 'merchant'].forEach(function (id) { $(id).classList.remove('filled'); });
+    $('amountPicks').classList.add('hidden');
     renderCatChips();
 
     $('scrim').classList.remove('hidden');

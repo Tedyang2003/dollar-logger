@@ -12,7 +12,7 @@
  * offline we fall back to whatever was saved last. The whole app is a few KB,
  * so the cost is a few hundred milliseconds on a connection you already have.
  */
-var CACHE = 'dollar-logger-v7';
+var CACHE = 'dollar-logger-v8';
 var ASSETS = [
   './',
   './index.html',

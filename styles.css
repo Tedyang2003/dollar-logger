@@ -494,6 +494,12 @@ body.gated{overflow:hidden}
 .day-total strong{font-size:1.35rem}
 
 /* ---------- receipt scan ---------- */
+.amount-picks{display:flex;flex-wrap:wrap;gap:6px;margin:-6px 0 14px}
+.amount-picks .lbl{width:100%;margin:0 0 2px}
+.pick{border:1px solid var(--line);background:var(--surface);color:var(--text);
+  border-radius:99px;padding:6px 11px;font-size:.8rem;cursor:pointer}
+.pick b{font-weight:650;margin-left:4px}
+.pick.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
 .scan-btn{
   display:flex;align-items:center;justify-content:center;gap:8px;
   border:1.5px dashed var(--line);border-radius:12px;padding:12px;margin-bottom:14px;
