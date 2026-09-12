@@ -209,6 +209,23 @@ window.DollarApi = (function () {
     },
 
     syncNow: runSync,
+
+    /* Sends a receipt photo for reading. Returns a draft to pre-fill the form;
+       never saves anything. */
+    scanReceipt: function (blob) {
+      var token = window.DollarAuth && window.DollarAuth.getToken();
+      if (!token) return Promise.reject(new Error('not_signed_in'));
+      return fetch(baseUrl() + '/receipts', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'image/jpeg' },
+        body: blob
+      }).then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (body) {
+          if (!res.ok) throw new Error(body.error || 'scan_failed');
+          return body.draft;
+        });
+      });
+    },
     scheduleSync: schedule
   };
 })();

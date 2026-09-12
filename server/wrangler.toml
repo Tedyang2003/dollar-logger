@@ -11,6 +11,10 @@ database_id = "df6ac5d4-0620-4a9d-b916-cdad7c8eedd9"
 # Switching to Google sign-in removed every server-side secret: a client ID is
 # public by design and so is a list of allowed origins. Public config belongs in
 # here, where it is versioned and reviewable, not hidden in a secret store.
+# Workers AI, for receipt scanning. Attached like the database: no API key.
+[ai]
+binding = "AI"
+
 [vars]
 GOOGLE_CLIENT_ID = "530673590797-5m85o2agsr8n5ssol738fsf8u3ebrqo8.apps.googleusercontent.com"
 # Production only. Local dev gets localhost from .dev.vars, which overrides

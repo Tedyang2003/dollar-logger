@@ -564,6 +564,68 @@
 
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
 
+  /* ============================ receipt scan ============================ */
+
+  /* Phone photos are 3-12 MB. Shrink to 1024px JPEG before upload: faster on
+     mobile data, well under the server's 4 MB cap, and fewer image tokens. */
+  function shrinkImage(file) {
+    return new Promise(function (resolve, reject) {
+      var img = new Image();
+      var url = URL.createObjectURL(file);
+      img.onload = function () {
+        var scale = Math.min(1, 1024 / Math.max(img.width, img.height));
+        var c = document.createElement('canvas');
+        c.width = Math.round(img.width * scale);
+        c.height = Math.round(img.height * scale);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        c.toBlob(function (b) { b ? resolve(b) : reject(new Error('encode')); }, 'image/jpeg', 0.85);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('decode')); };
+      img.src = url;
+    });
+  }
+
+  function fillFromDraft(d) {
+    var filled = 0;
+    function put(id, v) {
+      if (v === null || v === undefined || v === '') return;
+      $(id).value = v; $(id).classList.add('filled'); filled++;
+    }
+    put('amount', d.amount_cents ? (d.amount_cents / 100).toFixed(2) : null);
+    put('item', d.item);
+    put('merchant', d.merchant);
+    if (d.date) { setDate(d.date); filled++; }
+    return filled;
+  }
+
+  function onScan(e) {
+    var file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file || !window.DollarApi) return;
+
+    var btn = $('scanBtn');
+    btn.classList.add('busy');
+    $('scanLabel').textContent = 'Reading receipt...';
+
+    shrinkImage(file)
+      .then(function (blob) { return window.DollarApi.scanReceipt(blob); })
+      .then(function (draft) {
+        var n = fillFromDraft(draft || {});
+        toast(n ? 'Check the details, then tap Add.' : 'Could not read that - please type it in.');
+      })
+      .catch(function (err) {
+        var m = String(err && err.message);
+        toast(m === 'unreadable' ? 'Could not read that receipt - try a clearer photo.'
+            : m === 'scan_unavailable' ? 'Scanning is unavailable right now - please type it in.'
+            : 'Scan failed - please type it in.');
+      })
+      .then(function () {
+        btn.classList.remove('busy');
+        $('scanLabel').textContent = 'Scan a receipt';
+      });
+  }
+
   /* ============================ add sheet ============================ */
 
   var sheetOpen = false;
@@ -578,6 +640,7 @@
     $('amount').value = '';
     $('item').value = '';
     $('merchant').value = '';
+    ['amount', 'item', 'merchant'].forEach(function (id) { $(id).classList.remove('filled'); });
     renderCatChips();
 
     $('scrim').classList.remove('hidden');
@@ -1000,6 +1063,7 @@
 
     // --- add sheet ---
     $('fabAdd').addEventListener('click', openSheet);
+    $('scanInput').addEventListener('change', onScan);
     $('sheetCancel').addEventListener('click', closeSheet);
     $('scrim').addEventListener('click', closeSheet);
 

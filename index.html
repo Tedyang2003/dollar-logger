@@ -178,6 +178,12 @@
   </div>
 
   <form id="entryForm" autocomplete="off">
+    <label class="scan-btn" id="scanBtn">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3.5"/></svg>
+      <span id="scanLabel">Scan a receipt</span>
+      <input type="file" id="scanInput" accept="image/*" capture="environment" hidden>
+    </label>
+
     <div class="amount-row">
       <span class="cur" id="curSign">$</span>
       <input id="amount" type="text" inputmode="decimal" placeholder="0.00" aria-label="Amount">

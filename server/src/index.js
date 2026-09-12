@@ -12,6 +12,7 @@
  */
 
 import { verifyGoogleIdToken, AuthError, usingTestKeys } from './auth.js';
+import { scanReceipt } from './receipt.js';
 import { issueSession, verifySession, revokeSessions, SessionError } from './session.js';
 
 export default {
@@ -73,6 +74,10 @@ export default {
       if (url.pathname === '/session' && request.method === 'DELETE') {
         await revokeSessions(user.sub, env.DB);
         return ctx.json({ signed_out: true });
+      }
+
+      if (url.pathname === '/receipts' && request.method === 'POST') {
+        return await scanReceipt(request, env, ctx);
       }
 
       if (url.pathname === '/entries' && request.method === 'POST') {

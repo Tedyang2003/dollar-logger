@@ -493,6 +493,15 @@ body.gated{overflow:hidden}
 }
 .day-total strong{font-size:1.35rem}
 
+/* ---------- receipt scan ---------- */
+.scan-btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  border:1.5px dashed var(--line);border-radius:12px;padding:12px;margin-bottom:14px;
+  color:var(--accent);font-weight:600;cursor:pointer;
+}
+.scan-btn.busy{opacity:.6;pointer-events:none}
+.field input.filled{box-shadow:0 0 0 2px var(--accent-soft)}
+
 /* ---------- entry rows with category icons ---------- */
 .cat-badge{
   width:38px;height:38px;border-radius:12px;flex:none;
