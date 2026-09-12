@@ -6,7 +6,11 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS users (
   id          TEXT PRIMARY KEY,           -- Google's 'sub' claim, not an email
   email       TEXT,
-  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+
+  -- Unix seconds. Sessions issued before this are dead; signing out
+  -- everywhere moves it to now. Without it, "sign out" is a lie.
+  sessions_valid_from INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS entries (

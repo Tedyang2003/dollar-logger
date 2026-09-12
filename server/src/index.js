@@ -5,12 +5,14 @@
  * edge and your job is only to turn a Request into a Response.
  *
  * Configuration, none of which lives in this repo:
- *   wrangler secret put GOOGLE_CLIENT_ID - the OAuth client ID tokens must target
- *   wrangler secret put ALLOWED_ORIGIN   - comma-separated origins for CORS
- *   wrangler secret put ALLOWED_EMAILS   - optional allowlist of sign-ins
+ *   [vars] GOOGLE_CLIENT_ID  - the OAuth client ID tokens must target (public)
+ *   [vars] ALLOWED_ORIGIN    - comma-separated origins for CORS (public)
+ *   wrangler secret put SESSION_SECRET - signing key for our own sessions (SECRET)
+ *   wrangler secret put ALLOWED_EMAILS - optional allowlist of sign-ins
  */
 
 import { verifyGoogleIdToken, AuthError, usingTestKeys } from './auth.js';
+import { issueSession, verifySession, revokeSessions, SessionError } from './session.js';
 
 export default {
   async fetch(request, env) {
@@ -48,17 +50,29 @@ export default {
         });
       }
 
+      /* Trade a Google ID token for one of ours. This is the ONLY route that
+         accepts a Google token; everything else takes our session. */
+      if (url.pathname === '/session' && request.method === 'POST') {
+        return await createSession(request, env, ctx);
+      }
+
       // Everything past this point is scoped to a verified Google account.
       // Fail closed: any problem at all means 401, never a fallback identity.
       let user;
       try {
         user = await authenticate(request, env);
       } catch (err) {
-        if (err instanceof AuthError) {
+        if (err instanceof AuthError || err instanceof SessionError) {
           console.warn('auth rejected:', err.reason);
-          return ctx.json({ error: 'unauthorized' }, 401);
+          // The client needs to tell "sign in again" from "something broke".
+          return ctx.json({ error: 'unauthorized', reason: err.reason === 'expired' ? 'expired' : undefined }, 401);
         }
         throw err;
+      }
+
+      if (url.pathname === '/session' && request.method === 'DELETE') {
+        await revokeSessions(user.sub, env.DB);
+        return ctx.json({ signed_out: true });
       }
 
       if (url.pathname === '/entries' && request.method === 'POST') {
@@ -85,11 +99,47 @@ export default {
 
 /* ============================ auth ============================ */
 
-async function authenticate(request, env) {
+function bearer(request) {
   const header = request.headers.get('Authorization') || '';
   const m = header.match(/^Bearer\s+(.+)$/i);
-  if (!m) throw new AuthError('missing_token');
-  return await verifyGoogleIdToken(m[1], env);
+  return m ? m[1] : null;
+}
+
+// Normal requests carry OUR session token, not Google's.
+async function authenticate(request, env) {
+  const token = bearer(request);
+  if (!token) throw new AuthError('missing_token');
+  return await verifySession(token, env, env.DB);
+}
+
+/* POST /session - the one-time exchange.
+   In: a Google ID token.  Out: a 30-day session this server signed. */
+async function createSession(request, env, ctx) {
+  const token = bearer(request);
+  if (!token) return ctx.json({ error: 'unauthorized' }, 401);
+
+  let user;
+  try {
+    user = await verifyGoogleIdToken(token, env);
+  } catch (err) {
+    if (err instanceof AuthError) {
+      console.warn('session exchange rejected:', err.reason);
+      return ctx.json({ error: 'unauthorized' }, 401);
+    }
+    throw err;
+  }
+
+  // Signing in for the first time is what creates the account.
+  await env.DB.prepare('INSERT OR IGNORE INTO users (id, email) VALUES (?, ?)')
+    .bind(user.sub, user.email)
+    .run();
+
+  const session = await issueSession(user, env);
+  return ctx.json({
+    token: session.token,
+    expires_at: session.expires_at,
+    user: { email: user.email }
+  }, 201);
 }
 
 /* ============================ CORS ============================ */

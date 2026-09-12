@@ -67,8 +67,8 @@ window.DollarApi = (function () {
   function request(path, opts) {
     opts = opts || {};
 
-    // Every request carries the Google ID token. The server verifies it and
-    // derives the user from it - we never tell the server who we are.
+    // Every request carries our session token. The server derives the user
+    // from it - we never tell the server who we are.
     var token = window.DollarAuth && window.DollarAuth.getToken();
     if (!token) return Promise.reject(new Error('not_signed_in'));
 
@@ -80,6 +80,11 @@ window.DollarApi = (function () {
         var body = null;
         try { body = text ? JSON.parse(text) : null; } catch (e) { /* non-JSON error page */ }
         if (!res.ok) {
+          // A 401 means the session is gone - expired, revoked, or the signing
+          // key rotated. Drop it rather than retrying against a dead token,
+          // which also puts the sign-in screen back up.
+          if (res.status === 401 && window.DollarAuth) window.DollarAuth.invalidate();
+
           var err = new Error((body && body.error) || ('http_' + res.status));
           err.status = res.status;
           err.body = body;
@@ -109,7 +114,7 @@ window.DollarApi = (function () {
   function describeError(err) {
     if (!err) return 'Sync failed';
     if (err.message === 'not_signed_in') return 'Sign in to sync';
-    if (err.status === 401) return 'Session expired - sign in again';
+    if (err.status === 401) return 'Signed out - sign in again';
     if (err.status === 0 || err.message === 'Failed to fetch') return 'Server unreachable';
     if (err.status === 400) return 'Server rejected an entry';
     if (err.status >= 500) return 'Server error';

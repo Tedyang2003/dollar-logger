@@ -15,50 +15,43 @@
 </head>
 <body>
 
-<header class="topbar">
+<header class="topbar" id="topbar">
+  <button type="button" class="avatar" id="accountBtn" aria-label="Account">
+    <span id="avatarInitial">?</span>
+  </button>
   <h1 id="screenTitle">Log</h1>
   <div class="topbar-right" id="topbarRight"></div>
 </header>
+
+<section class="gate hidden" id="gate">
+  <div class="gate-inner">
+    <img src="icons/icon.svg" alt="" class="gate-icon" width="72" height="72">
+    <h1 class="gate-title">Dollar Logger</h1>
+    <p class="gate-sub">Log what you spend. See where it went.</p>
+
+    <div id="googleBtnGate" class="gbtn"></div>
+    <p class="gate-err hidden" id="gateError"></p>
+
+    <p class="gate-note muted small">
+      Your purchases are stored on your own server and never shared.
+      Signing in keeps them safe if you lose your phone.
+    </p>
+    <p class="gate-note muted small hidden" id="gateUnconfigured">
+      Sign-in is not configured yet. Set <code>GOOGLE_CLIENT_ID</code> and
+      <code>API_BASE_URL</code> in <code>config.js</code>.
+    </p>
+  </div>
+</section>
 
 <main id="main">
 
   <!-- ========== LOG ========== -->
   <section class="view" id="view-log">
-    <form id="entryForm" autocomplete="off">
-      <div class="amount-row">
-        <span class="cur" id="curSign">$</span>
-        <input id="amount" type="text" inputmode="decimal" placeholder="0.00" aria-label="Amount">
-      </div>
-
-      <div class="field">
-        <label class="lbl">Date</label>
-        <div class="date-row">
-          <button type="button" class="chip" data-dayshift="0">Today</button>
-          <button type="button" class="chip" data-dayshift="1">Yesterday</button>
-          <input id="date" type="date" aria-label="Date">
-        </div>
-      </div>
-
-      <div class="field">
-        <label class="lbl">Category</label>
-        <div class="chips" id="catChips"></div>
-      </div>
-
-      <div class="field">
-        <label class="lbl" for="note">Note <span class="muted">(optional)</span></label>
-        <input id="note" type="text" placeholder="e.g. groceries, bus fare">
-      </div>
-
-      <button type="submit" class="primary" id="addBtn">Add purchase</button>
-    </form>
-
     <div class="today-strip">
       <span>Today</span>
       <strong id="todayTotal">$0.00</strong>
     </div>
-
-    <h2 class="section-h">Recent</h2>
-    <ul class="entries" id="recentList"></ul>
+    <div class="daylist" id="logDays"></div>
   </section>
 
   <!-- ========== MONTH ========== -->
@@ -105,19 +98,6 @@
 
   <!-- ========== DATA ========== -->
   <section class="view hidden" id="view-data">
-    <h2 class="section-h">Account</h2>
-    <div class="sync-card">
-      <div class="sync-row">
-        <span class="sync-dot" id="authDot"></span>
-        <span id="authStatus">Not signed in</span>
-      </div>
-      <div id="googleBtn" class="gbtn"></div>
-      <p class="muted small" id="authHelp">Sign in so your entries reach your own server.</p>
-    </div>
-    <div class="stack">
-      <button type="button" class="ghost hidden" id="signOutBtn">Sign out</button>
-    </div>
-
     <h2 class="section-h">Server sync</h2>
     <div class="sync-card">
       <div class="sync-row">
@@ -130,20 +110,6 @@
       <button type="button" class="ghost" id="apiSyncNow">Sync now</button>
     </div>
 
-    <h2 class="section-h">Google Drive</h2>
-    <div class="sync-card">
-      <div class="sync-row">
-        <span class="sync-dot" id="syncDot"></span>
-        <span id="driveStatus">Not connected</span>
-      </div>
-      <p class="muted small" id="driveHelp">Backs up every entry to a single file in your Drive, seconds after you log it.</p>
-    </div>
-    <div class="stack">
-      <button type="button" class="primary" id="driveConnect">Connect Google Drive</button>
-      <button type="button" class="ghost hidden" id="driveSyncNow">Sync now</button>
-      <button type="button" class="ghost hidden" id="driveDisconnect">Disconnect</button>
-    </div>
-
     <h2 class="section-h">Export</h2>
     <p class="muted small">Downloads a CSV you can open in Excel or Google Sheets.</p>
     <div class="stack">
@@ -154,7 +120,7 @@
     </div>
 
     <h2 class="section-h">Backup</h2>
-    <p class="muted small">Entries live in this browser only. A backup file restores them on a new phone or after clearing browsing data.</p>
+    <p class="muted small">A backup file restores your entries on a new phone or after clearing browsing data.</p>
     <div class="stack">
       <button type="button" class="ghost" id="backupBtn">Download backup (JSON)</button>
       <label class="ghost filelabel">Restore from backup<input type="file" id="restoreInput" accept="application/json,.json" hidden></label>
@@ -163,7 +129,7 @@
     <h2 class="section-h">Settings</h2>
     <div class="field">
       <label class="lbl" for="currency">Currency symbol</label>
-      <input id="currency" type="text" maxlength="3" style="max-width:6rem">
+      <input id="currency" type="text" maxlength="3" class="narrow">
     </div>
     <div class="field">
       <label class="lbl">Categories</label>
@@ -183,19 +149,110 @@
 
 </main>
 
+<!-- ========== add button ========== -->
+<button type="button" class="fab" id="fabAdd" aria-label="Add a purchase">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+</button>
+
+<!-- ========== add sheet ========== -->
+<div class="scrim hidden" id="scrim"></div>
+
+<div class="sheet hidden" id="addSheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+  <div class="sheet-grip" aria-hidden="true"></div>
+
+  <div class="sheet-head">
+    <button type="button" class="sheet-btn" id="sheetCancel">Cancel</button>
+    <h2 id="sheetTitle">New purchase</h2>
+    <button type="submit" class="sheet-btn strong" form="entryForm" id="sheetSave">Add</button>
+  </div>
+
+  <form id="entryForm" autocomplete="off">
+    <div class="amount-row">
+      <span class="cur" id="curSign">$</span>
+      <input id="amount" type="text" inputmode="decimal" placeholder="0.00" aria-label="Amount">
+    </div>
+
+    <div class="field">
+      <label class="lbl">Date</label>
+      <button type="button" class="date-btn" id="dateBtn">
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="ic-cal">
+          <rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>
+        </svg>
+        <span id="dateLabel">Today</span>
+      </button>
+      <input type="hidden" id="date">
+    </div>
+
+    <div class="field">
+      <label class="lbl">Category</label>
+      <div class="chips" id="catChips"></div>
+    </div>
+
+    <div class="field">
+      <label class="lbl" for="note">Note <span class="muted">(optional)</span></label>
+      <input id="note" type="text" placeholder="e.g. groceries, bus fare">
+    </div>
+
+    <button type="submit" class="primary" id="addBtn">Add purchase</button>
+  </form>
+</div>
+
+<!-- ========== date picker ========== -->
+<div class="cal-scrim hidden" id="calScrim">
+  <div class="cal" id="cal" role="dialog" aria-modal="true" aria-label="Choose a date">
+    <div class="cal-head">
+      <button type="button" class="cal-nav" id="calPrev" aria-label="Previous month">&#8249;</button>
+      <div class="cal-title" id="calTitle">—</div>
+      <button type="button" class="cal-nav" id="calNext" aria-label="Next month">&#8250;</button>
+    </div>
+    <div class="cal-dow" aria-hidden="true">
+      <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
+    </div>
+    <div class="cal-grid" id="calGrid"></div>
+    <div class="cal-foot">
+      <button type="button" class="cal-text" id="calToday">Today</button>
+      <button type="button" class="cal-text" id="calCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <nav class="tabbar">
-  <button type="button" class="tab active" data-view="log"><span class="ic">+</span><span>Log</span></button>
+  <button type="button" class="tab active" data-view="log"><span class="ic">☰</span><span>Log</span></button>
   <button type="button" class="tab" data-view="month"><span class="ic">▦</span><span>Month</span></button>
   <button type="button" class="tab" data-view="year"><span class="ic">▤</span><span>Year</span></button>
   <button type="button" class="tab" data-view="data"><span class="ic">⤓</span><span>Data</span></button>
 </nav>
+
+<div class="scrim hidden" id="acctScrim"></div>
+<div class="sheet hidden" id="acctSheet" role="dialog" aria-modal="true" aria-labelledby="acctTitle">
+  <div class="sheet-grip" aria-hidden="true"></div>
+  <div class="sheet-head">
+    <button type="button" class="sheet-btn" id="acctClose">Close</button>
+    <h2 id="acctTitle">Account</h2>
+    <span class="sheet-btn" aria-hidden="true"></span>
+  </div>
+
+  <div class="acct">
+    <div class="acct-avatar" id="acctAvatar">?</div>
+    <div class="acct-email" id="authStatus">Not signed in</div>
+    <div class="sync-row acct-sync">
+      <span class="sync-dot" id="authDot"></span>
+      <span id="authHelp">Signed in</span>
+    </div>
+  </div>
+
+  <div id="googleBtn" class="gbtn"></div>
+
+  <div class="stack">
+    <button type="button" class="ghost hidden" id="signOutBtn">Sign out on all devices</button>
+  </div>
+</div>
 
 <div id="toast" class="toast hidden"></div>
 
 <script src="config.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="signin.js"></script>
-<script src="drive.js"></script>
 <script src="api.js"></script>
 <script src="app.js"></script>
 </body>

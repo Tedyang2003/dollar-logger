@@ -1,13 +1,13 @@
 /* Offline cache for Dollar Logger.
    Bump CACHE whenever you change the app files, or phones keep the old copy. */
-var CACHE = 'dollar-logger-v2';
+var CACHE = 'dollar-logger-v3';
 var ASSETS = [
   './',
   './index.html',
   './styles.css',
   './app.js',
   './config.js',
-  './drive.js',
+  './signin.js',
   './manifest.webmanifest',
   './icons/icon.svg'
 ];

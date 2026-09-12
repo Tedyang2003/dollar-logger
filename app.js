@@ -1,5 +1,6 @@
 /* Dollar Logger - a local-first purchase log.
-   Everything lives in this browser's localStorage. No server, no accounts. */
+   Entries are written to localStorage first and rendered from there, so the app
+   is instant and works offline. api.js reconciles that with the server after. */
 
 (function () {
   'use strict';
@@ -9,12 +10,12 @@
 
   var db = {
     entries: [],   // {id, date:'YYYY-MM-DD', amount:Number, category:String, note:String, created:ISO}
-    deleted: [],   // tombstones {id, at} - without these, Drive would re-add deleted entries
+    deleted: [],   // tombstones {id, at} - without these, sync would re-add deleted entries
     categories: DEFAULT_CATS.slice(),
     currency: '$'
   };
 
-  var applyingRemote = false;   // suppresses the sync loop while merging Drive data
+  var applyingRemote = false;   // suppresses the sync loop while merging server data
 
   var ui = {
     view: 'log',
@@ -49,7 +50,6 @@
     // Push shortly after, unless this save IS the result of a pull.
     if (applyingRemote) return;
     if (window.DollarApi) window.DollarApi.scheduleSync();
-    if (window.DollarDrive) window.DollarDrive.scheduleSync();
   }
 
   function tombstone(id) {
@@ -57,7 +57,7 @@
     if (db.deleted.length > 1000) db.deleted = db.deleted.slice(-1000);
   }
 
-  /* Merge a copy pulled from Drive into what is on this device.
+  /* Merge a copy pulled from the server into what is on this device.
      Union of entries by id, minus anything either side has deleted. Merging
      rather than overwriting means a reinstall or a second device adds to the
      history instead of wiping it. */
@@ -268,6 +268,34 @@
     return row;
   }
 
+  /* Renders entries grouped under day headings, newest day first.
+     Both the Log tab and the Month tab want exactly this, so it lives once. */
+  function renderDayGroups(host, list, emptyText) {
+    host.innerHTML = '';
+    if (!list.length) {
+      host.appendChild(el('div', 'empty', emptyText));
+      return;
+    }
+
+    var byDay = {};
+    list.forEach(function (e) { (byDay[e.date] = byDay[e.date] || []).push(e); });
+
+    Object.keys(byDay).sort().reverse().forEach(function (key) {
+      var group = el('div', 'daygroup');
+
+      var head = el('div', 'dayhead');
+      head.appendChild(el('span', null, prettyDay(key)));
+      head.appendChild(el('span', null, money(sum(byDay[key]))));
+      group.appendChild(head);
+
+      var ul = el('ul', 'entries');
+      byDay[key].forEach(function (e) { ul.appendChild(entryNode(e)); });
+      group.appendChild(ul);
+
+      host.appendChild(group);
+    });
+  }
+
   /* ============================ LOG view ============================ */
 
   function renderCatChips() {
@@ -288,14 +316,9 @@
     var today = db.entries.filter(function (e) { return e.date === todayKey(); });
     $('todayTotal').textContent = money(sum(today));
 
-    var list = $('recentList');
-    list.innerHTML = '';
-    var recent = sorted().slice(0, 15);
-    if (!recent.length) {
-      list.appendChild(el('li', 'empty', 'No purchases logged yet. Add your first one above.'));
-      return;
-    }
-    recent.forEach(function (e) { list.appendChild(entryNode(e)); });
+    // Cap the DOM rather than rendering years of history into one scroller.
+    renderDayGroups($('logDays'), sorted().slice(0, 150),
+                    'Nothing logged yet. Tap + to add your first purchase.');
   }
 
   function addEntry(ev) {
@@ -318,6 +341,7 @@
 
     $('amount').value = '';
     $('note').value = '';
+    closeSheet();
     renderAll();
     toast('Logged ' + money(amount) + ' · ' + prettyDay(date));
   }
@@ -331,6 +355,142 @@
     save();
     renderAll();
     toast('Deleted.');
+  }
+
+  /* ============================ date picker ============================ */
+
+  var calMonth = null;      // Date pinned to the 1st of the displayed month
+
+  function setDate(key) {
+    $('date').value = key;
+    $('dateLabel').textContent = longDay(key);
+  }
+
+  function longDay(key) {
+    if (key === todayKey()) return 'Today';
+    if (key === shiftDayKey(1)) return 'Yesterday';
+    var d = fromKey(key);
+    var base = DAYS3[d.getDay()] + ', ' + d.getDate() + ' ' + MON3[d.getMonth()];
+    // Only show the year when it is not the current one - less noise, no ambiguity.
+    return d.getFullYear() === new Date().getFullYear() ? base : base + ' ' + d.getFullYear();
+  }
+
+  function openCal() {
+    var selected = $('date').value || todayKey();
+    var d = fromKey(selected);
+    calMonth = new Date(d.getFullYear(), d.getMonth(), 1);
+
+    renderCal();
+    $('calScrim').classList.remove('hidden');
+    requestAnimationFrame(function () { $('calScrim').classList.add('show'); });
+  }
+
+  function closeCal() {
+    $('calScrim').classList.remove('show');
+    setTimeout(function () { $('calScrim').classList.add('hidden'); }, 180);
+  }
+
+  function renderCal() {
+    var y = calMonth.getFullYear(), m = calMonth.getMonth();
+    $('calTitle').textContent = MONTHS[m] + ' ' + y;
+
+    var today = todayKey();
+    var selected = $('date').value;
+
+    // Which days already have entries - a dot under the number, like a calendar app.
+    var busy = {};
+    db.entries.forEach(function (e) { busy[e.date] = true; });
+
+    var grid = $('calGrid');
+    grid.innerHTML = '';
+
+    // Blank cells so the 1st lands under its real weekday.
+    var firstWeekday = new Date(y, m, 1).getDay();
+    for (var b = 0; b < firstWeekday; b++) {
+      var pad = el('button', 'cal-day blank', '');
+      pad.type = 'button';
+      pad.disabled = true;
+      grid.appendChild(pad);
+    }
+
+    var daysInMonth = new Date(y, m + 1, 0).getDate();
+    for (var day = 1; day <= daysInMonth; day++) {
+      var key = y + '-' + pad2(m + 1) + '-' + pad2(day);
+      var cls = 'cal-day';
+      if (key === today) cls += ' today';
+      if (key === selected) cls += ' chosen';
+      if (busy[key]) cls += ' has-entries';
+
+      var cell = el('button', cls, String(day));
+      cell.type = 'button';
+
+      // You cannot have spent money tomorrow.
+      if (key > today) {
+        cell.disabled = true;
+      } else {
+        cell.addEventListener('click', (function (k) {
+          return function () { setDate(k); closeCal(); };
+        })(key));
+      }
+      grid.appendChild(cell);
+    }
+
+    // Nothing to see in future months either.
+    var nextMonthStart = new Date(y, m + 1, 1);
+    $('calNext').disabled = toKey(nextMonthStart) > today;
+  }
+
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+  /* ============================ add sheet ============================ */
+
+  var sheetOpen = false;
+  var lastFocus = null;
+
+  function openSheet() {
+    if (sheetOpen) return;
+    sheetOpen = true;
+    lastFocus = document.activeElement;
+
+    setDate(todayKey());
+    $('amount').value = '';
+    $('note').value = '';
+    renderCatChips();
+
+    $('scrim').classList.remove('hidden');
+    $('addSheet').classList.remove('hidden');
+
+    // One frame between "displayed" and "animated" or the transition is skipped:
+    // the browser needs a paint at the start position before it has one to move from.
+    requestAnimationFrame(function () {
+      $('scrim').classList.add('show');
+      $('addSheet').classList.add('show');
+    });
+
+    // The page behind must not scroll while a sheet is over it.
+    document.body.classList.add('locked');
+
+    // Deliberately NOT focusing the amount field: on iOS that summons the
+    // keyboard mid-animation and the sheet lands in the wrong place.
+    $('fabAdd').classList.add('hidden');
+  }
+
+  function closeSheet() {
+    if (!sheetOpen) return;
+    sheetOpen = false;
+
+    $('scrim').classList.remove('show');
+    $('addSheet').classList.remove('show');
+    document.body.classList.remove('locked');
+
+    setTimeout(function () {
+      if (sheetOpen) return;                 // reopened during the animation
+      $('scrim').classList.add('hidden');
+      $('addSheet').classList.add('hidden');
+    }, 240);
+
+    if (ui.view === 'log') $('fabAdd').classList.remove('hidden');
+    if (lastFocus && lastFocus.focus) lastFocus.focus();
   }
 
   /* ============================ MONTH view ============================ */
@@ -362,30 +522,7 @@
       grouped.forEach(function (g) { cats.appendChild(barRow(g.category, g.total, max, total)); });
     }
 
-    var wrap = $('monthDays');
-    wrap.innerHTML = '';
-    if (!list.length) {
-      wrap.appendChild(el('div', 'empty', 'No purchases this month.'));
-      return;
-    }
-
-    var byDay = {};
-    list.forEach(function (e) { (byDay[e.date] = byDay[e.date] || []).push(e); });
-
-    Object.keys(byDay).sort().reverse().forEach(function (key) {
-      var group = el('div', 'daygroup');
-
-      var head = el('div', 'dayhead');
-      head.appendChild(el('span', null, prettyDay(key)));
-      head.appendChild(el('span', null, money(sum(byDay[key]))));
-      group.appendChild(head);
-
-      var ul = el('ul', 'entries');
-      byDay[key].forEach(function (e) { ul.appendChild(entryNode(e)); });
-      group.appendChild(ul);
-
-      wrap.appendChild(group);
-    });
+    renderDayGroups($('monthDays'), list, 'No purchases this month.');
   }
 
   /* ============================ YEAR view ============================ */
@@ -498,7 +635,7 @@
       });
 
       // Restoring is an explicit "I want these back", so clear any tombstone
-      // that would otherwise delete them again on the next Drive sync.
+      // that would otherwise delete them again on the next sync.
       if (added) {
         db.deleted = db.deleted.filter(function (t) { return !restored[t.id]; });
       }
@@ -551,95 +688,103 @@
     $('statLine').textContent = line;
   }
 
-  /* ============================ Drive sync UI ============================ */
+  /* ============================ sync status UI ============================ */
 
   var syncState = { state: 'off', detail: '', linked: false };
 
   var SYNC_TEXT = {
-    off: 'Drive sync not set up',
+    off: 'Sync not set up',
     idle: 'Not connected',
-    pending: 'Saving to Drive...',
+    pending: 'Saving...',
     syncing: 'Syncing...',
     ok: 'Synced',
     error: 'Sync problem'
   };
 
-  function onSyncStatus(s) {
-    syncState = s;
+  /* ============================ account + gate ============================ */
 
-    var dot = $('syncDot');
-    if (dot) {
-      dot.className = 'sync-dot ' + s.state;
-    }
-    var label = $('driveStatus');
-    if (label) label.textContent = s.detail || SYNC_TEXT[s.state] || '';
+  /* The gate is the whole point of the change: until there is a session, the
+     app is not shown at all. It is driven only by DollarAuth state, so a
+     session expiring mid-use puts the sign-in screen back without a reload. */
+  function applyAuthState(s) {
+    var signedIn = !!s.signedIn;
 
-    // A quiet marker in the header so sync trouble is visible from any tab.
-    var head = $('topbarRight');
-    if (head) {
-      if (s.state === 'error' && s.linked) { head.textContent = 'sync !'; head.style.color = ''; }
-      else if (s.state === 'syncing' || s.state === 'pending') head.textContent = 'sync...';
-      else head.textContent = '';
-    }
+    document.body.classList.toggle('gated', !signedIn);
+    $('gate').classList.toggle('hidden', signedIn);
 
-    var connect = $('driveConnect');
-    var sync = $('driveSyncNow');
-    var disconnect = $('driveDisconnect');
-    if (!connect || !sync || !disconnect) return;
+    // Nothing is configured yet - say so rather than showing a dead button.
+    $('gateUnconfigured').classList.toggle('hidden', !!s.configured);
 
-    var configured = window.DollarDrive && window.DollarDrive.isConfigured();
-    if (!configured) {
-      connect.classList.remove('hidden');
-      connect.textContent = 'Set up Drive sync';
-      connect.disabled = true;
-      sync.classList.add('hidden');
-      disconnect.classList.add('hidden');
-      return;
-    }
-    connect.disabled = false;
+    var initial = (s.email || '?').trim().charAt(0).toUpperCase() || '?';
+    $('avatarInitial').textContent = signedIn ? initial : '?';
+    $('accountBtn').classList.toggle('out', !signedIn);
+    $('acctAvatar').textContent = signedIn ? initial : '?';
 
-    if (s.linked) {
-      connect.classList.toggle('hidden', s.state !== 'error');
-      connect.textContent = 'Reconnect';
-      sync.classList.remove('hidden');
-      disconnect.classList.remove('hidden');
-    } else {
-      connect.classList.remove('hidden');
-      connect.textContent = 'Connect Google Drive';
-      sync.classList.add('hidden');
-      disconnect.classList.add('hidden');
-    }
+    $('authStatus').textContent = signedIn ? (s.email || 'Signed in') : 'Not signed in';
+    $('authHelp').textContent = s.busy ? 'Signing in...'
+      : signedIn ? 'Session lasts 30 days' : 'Sign in to sync';
+
+    var dot = $('authDot');
+    if (dot) dot.className = 'sync-dot ' + (signedIn ? 'ok' : 'idle');
+
+    $('signOutBtn').classList.toggle('hidden', !signedIn);
+    $('googleBtn').classList.toggle('hidden', signedIn);
+
+    // The + button belongs to the Log tab, and only once you are in.
+    $('fabAdd').classList.toggle('hidden', !signedIn || ui.view !== 'log' || sheetOpen);
   }
 
   function initAuth() {
     if (!window.DollarAuth) return;
 
-    window.DollarAuth.onChange(function (s) {
-      var dot = $('authDot');
-      if (dot) dot.className = 'sync-dot ' + (s.signedIn ? 'ok' : (s.configured ? 'idle' : 'off'));
+    window.DollarAuth.onChange(applyAuthState);
 
-      var label = $('authStatus');
-      if (label) {
-        label.textContent = !s.configured ? 'Sign-in not set up'
-          : s.signedIn ? ('Signed in as ' + (s.email || s.name || 'you'))
-          : 'Not signed in';
-      }
-
-      var out = $('signOutBtn');
-      if (out) out.classList.toggle('hidden', !s.signedIn);
-
-      var help = $('authHelp');
-      if (help && !s.configured) {
-        help.textContent = 'Add GOOGLE_CLIENT_ID to config.js - see the README.';
-      }
+    window.DollarAuth.onError(function (msg) {
+      var box = $('gateError');
+      box.textContent = msg;
+      box.classList.remove('hidden');
+      toast(msg);
     });
 
+    $('accountBtn').addEventListener('click', openAccount);
+    $('acctClose').addEventListener('click', closeAccount);
+    $('acctScrim').addEventListener('click', closeAccount);
+
     $('signOutBtn').addEventListener('click', function () {
+      if (!confirm('Sign out on all devices? Entries already on this phone stay here.')) return;
       window.DollarAuth.signOut();
-      toast('Signed out. Entries stay on this phone.');
+      closeAccount();
+      toast('Signed out.');
     });
 
     window.DollarAuth.init();
+  }
+
+  var accountOpen = false;
+
+  function openAccount() {
+    if (accountOpen) return;
+    accountOpen = true;
+    $('acctScrim').classList.remove('hidden');
+    $('acctSheet').classList.remove('hidden');
+    requestAnimationFrame(function () {
+      $('acctScrim').classList.add('show');
+      $('acctSheet').classList.add('show');
+    });
+    document.body.classList.add('locked');
+  }
+
+  function closeAccount() {
+    if (!accountOpen) return;
+    accountOpen = false;
+    $('acctScrim').classList.remove('show');
+    $('acctSheet').classList.remove('show');
+    document.body.classList.remove('locked');
+    setTimeout(function () {
+      if (accountOpen) return;
+      $('acctScrim').classList.add('hidden');
+      $('acctSheet').classList.add('hidden');
+    }, 240);
   }
 
   function initApi() {
@@ -653,6 +798,14 @@
         if (dot) dot.className = 'sync-dot ' + s.state;
         var label = $('apiStatus');
         if (label) label.textContent = s.detail || SYNC_TEXT[s.state] || '';
+
+        // A quiet marker in the header so sync trouble is visible from any tab.
+        var head = $('topbarRight');
+        if (head) {
+          if (s.state === 'error') head.textContent = 'sync !';
+          else if (s.state === 'syncing' || s.state === 'pending') head.textContent = 'sync...';
+          else head.textContent = '';
+        }
       }
     });
 
@@ -672,43 +825,6 @@
     }
   }
 
-  function initDrive() {
-    if (!window.DollarDrive) return;
-
-    window.DollarDrive.init({
-      getState: function () { return db; },
-      mergeRemote: mergeRemote,
-      onStatus: onSyncStatus
-    });
-
-    $('driveConnect').addEventListener('click', function () {
-      if (!window.DollarDrive.isConfigured()) {
-        toast('Add your Google client ID to config.js first - see the README.');
-        return;
-      }
-      window.DollarDrive.connect().then(function (ok) {
-        toast(ok ? 'Drive connected.' : 'Could not connect to Drive.');
-      });
-    });
-
-    $('driveSyncNow').addEventListener('click', function () {
-      window.DollarDrive.syncNow().then(function (ok) {
-        toast(ok ? 'Synced to Drive.' : (syncState.detail || 'Sync failed.'));
-      });
-    });
-
-    $('driveDisconnect').addEventListener('click', function () {
-      if (!confirm('Disconnect Drive? Entries stay on this phone, and the file stays in your Drive.')) return;
-      window.DollarDrive.disconnect();
-      toast('Drive disconnected.');
-    });
-
-    if (!window.DollarDrive.isConfigured()) {
-      var help = $('driveHelp');
-      if (help) help.textContent = 'Not set up yet. Add your Google client ID to config.js - the README walks through it.';
-    }
-  }
-
   /* ============================ views ============================ */
 
   var TITLES = { log: 'Log', month: 'Month', year: 'Year', data: 'Data' };
@@ -722,6 +838,8 @@
       t.classList.toggle('active', t.getAttribute('data-view') === name);
     });
     $('screenTitle').textContent = TITLES[name];
+    var signedIn = window.DollarAuth && window.DollarAuth.isSignedIn();
+    $('fabAdd').classList.toggle('hidden', !signedIn || name !== 'log' || sheetOpen);
     window.scrollTo(0, 0);
     renderAll();
   }
@@ -742,15 +860,38 @@
     ui.month = new Date(now.getFullYear(), now.getMonth(), 1);
     ui.year = now.getFullYear();
 
-    $('date').value = todayKey();
+    setDate(todayKey());
     renderCatChips();
 
     $('entryForm').addEventListener('submit', addEntry);
 
-    Array.prototype.forEach.call(document.querySelectorAll('[data-dayshift]'), function (b) {
-      b.addEventListener('click', function () {
-        $('date').value = shiftDayKey(Number(b.getAttribute('data-dayshift')));
-      });
+    // --- add sheet ---
+    $('fabAdd').addEventListener('click', openSheet);
+    $('sheetCancel').addEventListener('click', closeSheet);
+    $('scrim').addEventListener('click', closeSheet);
+
+    // --- date picker ---
+    $('dateBtn').addEventListener('click', openCal);
+    $('calCancel').addEventListener('click', closeCal);
+    $('calToday').addEventListener('click', function () { setDate(todayKey()); closeCal(); });
+    $('calPrev').addEventListener('click', function () {
+      calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1);
+      renderCal();
+    });
+    $('calNext').addEventListener('click', function () {
+      calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1);
+      renderCal();
+    });
+    $('calScrim').addEventListener('click', function (e) {
+      if (e.target === $('calScrim')) closeCal();    // backdrop only, not the card
+    });
+
+    // Escape closes the topmost layer first.
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      if (!$('calScrim').classList.contains('hidden')) closeCal();
+      else if (sheetOpen) closeSheet();
+      else if (accountOpen) closeAccount();
     });
 
     Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (t) {
@@ -831,7 +972,6 @@
 
     initAuth();
     initApi();
-    initDrive();
     setView('log');
 
     if ('serviceWorker' in navigator) {

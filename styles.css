@@ -224,3 +224,194 @@ button:disabled{opacity:.5;cursor:default}
 /* ---------- sign-in ---------- */
 .gbtn{margin:12px 0 4px;display:flex;justify-content:center}
 .gbtn:empty{display:none}
+
+.narrow{max-width:6rem}
+
+/* ---------- icons ---------- */
+svg{width:1.25em;height:1.25em;fill:none;stroke:currentColor;stroke-width:2;
+    stroke-linecap:round;stroke-linejoin:round}
+
+/* ---------- floating add button ---------- */
+.fab{
+  position:fixed;right:18px;z-index:25;
+  bottom:calc(var(--tabh) + var(--safe-b) + 18px);
+  width:58px;height:58px;border-radius:50%;border:0;
+  background:var(--accent);color:var(--accent-ink);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  box-shadow:0 6px 20px rgba(0,0,0,.28);
+  transition:transform .16s ease, opacity .16s ease;
+}
+.fab svg{width:26px;height:26px;stroke-width:2.5}
+.fab:active{transform:scale(.92)}
+.fab.hidden{display:none !important}
+
+/* ---------- scrim + bottom sheet ---------- */
+.scrim{
+  position:fixed;inset:0;z-index:40;
+  background:rgba(0,0,0,.5);
+  opacity:0;transition:opacity .2s ease;
+}
+.scrim.show{opacity:1}
+
+.sheet{
+  position:fixed;left:0;right:0;bottom:0;z-index:41;
+  background:var(--bg);
+  border-radius:20px 20px 0 0;
+  border-top:1px solid var(--line);
+  padding:0 16px calc(var(--safe-b) + 20px);
+  max-height:92vh;overflow-y:auto;
+  transform:translateY(100%);
+  transition:transform .24s cubic-bezier(.32,.72,0,1);
+  box-shadow:0 -8px 30px rgba(0,0,0,.25);
+}
+.sheet.show{transform:translateY(0)}
+@media (min-width:640px){
+  .sheet{left:50%;right:auto;transform:translate(-50%,100%);width:560px;border-radius:20px 20px 0 0}
+  .sheet.show{transform:translate(-50%,0)}
+}
+@media (prefers-reduced-motion: reduce){
+  .sheet,.scrim,.fab{transition:none}
+}
+
+.sheet-grip{
+  width:38px;height:4px;border-radius:99px;background:var(--line);
+  margin:10px auto 2px;
+}
+.sheet-head{
+  position:sticky;top:0;z-index:2;background:var(--bg);
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:6px 0 14px;
+}
+.sheet-head h2{font-size:1rem;font-weight:650}
+.sheet-btn{
+  background:transparent;border:0;color:var(--muted);
+  font-size:.95rem;padding:8px 4px;cursor:pointer;min-width:64px;
+}
+.sheet-btn:first-child{text-align:left}
+.sheet-btn.strong{color:var(--accent);font-weight:650;text-align:right}
+
+/* ---------- date button ---------- */
+.date-btn{
+  display:flex;align-items:center;gap:10px;width:100%;
+  background:var(--surface);border:1px solid var(--line);color:var(--text);
+  border-radius:10px;padding:12px 13px;min-height:48px;cursor:pointer;text-align:left;
+}
+.date-btn .ic-cal{color:var(--muted);flex:none}
+
+/* ---------- log day groups ---------- */
+#logDays .daygroup .dayhead{font-size:.82rem}
+#logDays .daygroup .dayhead span:first-child{font-weight:650;color:var(--text)}
+
+/* ---------- body scroll lock while a sheet is open ---------- */
+body.locked{overflow:hidden}
+
+/* ---------- date picker ---------- */
+.cal-scrim{
+  position:fixed;inset:0;z-index:50;
+  background:rgba(0,0,0,.5);
+  display:flex;align-items:center;justify-content:center;padding:20px;
+  opacity:0;transition:opacity .18s ease;
+}
+.cal-scrim.show{opacity:1}
+
+.cal{
+  width:100%;max-width:340px;
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:18px;padding:14px 14px 8px;
+  box-shadow:0 12px 40px rgba(0,0,0,.35);
+  transform:scale(.94);transition:transform .18s ease;
+}
+.cal-scrim.show .cal{transform:scale(1)}
+@media (prefers-reduced-motion: reduce){
+  .cal-scrim,.cal{transition:none}
+}
+
+.cal-head{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:8px}
+.cal-title{font-weight:650;font-size:1rem}
+.cal-nav{
+  width:40px;height:40px;border-radius:50%;border:0;
+  background:transparent;color:var(--text);font-size:1.3rem;cursor:pointer;flex:none;
+}
+.cal-nav:active{background:var(--surface-2)}
+.cal-nav:disabled{opacity:.25;cursor:default}
+
+.cal-dow{
+  display:grid;grid-template-columns:repeat(7,1fr);
+  font-size:.72rem;color:var(--muted);text-align:center;margin-bottom:4px;
+}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+
+.cal-day{
+  aspect-ratio:1;width:100%;
+  display:flex;align-items:center;justify-content:center;
+  border:0;background:transparent;color:var(--text);
+  border-radius:50%;font-size:.9rem;cursor:pointer;
+}
+.cal-day.blank{visibility:hidden;cursor:default}
+.cal-day:disabled{color:var(--muted);opacity:.35;cursor:default}
+.cal-day.today{box-shadow:inset 0 0 0 1.5px var(--accent);color:var(--accent);font-weight:650}
+.cal-day.chosen{background:var(--accent);color:var(--accent-ink);font-weight:650;box-shadow:none}
+.cal-day.has-entries::after{
+  content:'';position:absolute;transform:translateY(13px);
+  width:4px;height:4px;border-radius:50%;background:var(--muted);
+}
+.cal-day{position:relative}
+.cal-day.chosen.has-entries::after{background:var(--accent-ink)}
+
+.cal-foot{display:flex;justify-content:space-between;margin-top:6px}
+.cal-text{
+  background:transparent;border:0;color:var(--accent);
+  font-size:.9rem;font-weight:600;padding:10px 8px;cursor:pointer;
+}
+.cal-text:last-child{color:var(--muted)}
+
+/* ---------- header account button ---------- */
+.topbar{display:grid;grid-template-columns:40px 1fr 40px;align-items:center}
+.topbar h1{text-align:center;font-size:1.05rem}
+.topbar-right{text-align:right;font-size:.75rem}
+.avatar{
+  width:34px;height:34px;border-radius:50%;flex:none;
+  background:var(--accent);color:var(--accent-ink);
+  border:0;cursor:pointer;font-weight:700;font-size:.95rem;
+  display:flex;align-items:center;justify-content:center;
+}
+.avatar.out{background:var(--surface-2);color:var(--muted)}
+
+/* ---------- sign-in gate ---------- */
+.gate{
+  position:fixed;inset:0;z-index:60;
+  background:var(--bg);
+  display:flex;align-items:center;justify-content:center;
+  padding:32px 24px calc(32px + var(--safe-b));
+  overflow-y:auto;
+}
+.gate-inner{width:100%;max-width:340px;text-align:center}
+.gate-icon{border-radius:18px;margin-bottom:18px}
+.gate-title{font-size:1.6rem;margin-bottom:6px}
+.gate-sub{color:var(--muted);margin:0 0 30px;font-size:.95rem}
+.gate .gbtn{justify-content:center;margin-bottom:8px}
+.gate-note{margin-top:26px;line-height:1.5}
+.gate-err{
+  color:var(--danger);font-size:.85rem;margin:10px 0 0;
+}
+.gate code{
+  background:var(--surface-2);padding:1px 5px;border-radius:4px;font-size:.85em;
+}
+
+/* hide the app entirely while the gate is up */
+body.gated main,
+body.gated .tabbar,
+body.gated .topbar,
+body.gated .fab{display:none !important}
+body.gated{overflow:hidden}
+
+/* ---------- account sheet ---------- */
+.acct{text-align:center;padding:4px 0 18px}
+.acct-avatar{
+  width:56px;height:56px;border-radius:50%;margin:0 auto 12px;
+  background:var(--accent);color:var(--accent-ink);
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.4rem;font-weight:700;
+}
+.acct-email{font-weight:600;margin-bottom:8px;word-break:break-all}
+.acct-sync{justify-content:center;font-size:.85rem;color:var(--muted);font-weight:400}
