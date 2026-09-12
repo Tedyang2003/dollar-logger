@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#111417">
+<meta name="theme-color" content="#faf7fe" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141019" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Dollar Logger">
@@ -47,11 +48,21 @@
 
   <!-- ========== LOG ========== -->
   <section class="view" id="view-log">
-    <div class="today-strip">
-      <span>Today</span>
-      <strong id="todayTotal">$0.00</strong>
+    <div class="daybar">
+      <button type="button" class="daybar-title" id="dayTitle">
+        <span id="dayTitleText">—</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="weekstrip" id="weekStrip"></div>
     </div>
-    <div class="daylist" id="logDays"></div>
+
+    <div class="dayarea" id="dayArea">
+      <div class="day-total">
+        <span id="dayLabel">Today</span>
+        <strong id="dayTotal">$0.00</strong>
+      </div>
+      <ul class="entries" id="dayEntries"></ul>
+    </div>
   </section>
 
   <!-- ========== MONTH ========== -->
@@ -173,6 +184,11 @@
     </div>
 
     <div class="field">
+      <label class="lbl" for="item">Item</label>
+      <input id="item" type="text" placeholder="e.g. flat white, bus fare" maxlength="100">
+    </div>
+
+    <div class="field">
       <label class="lbl">Date</label>
       <button type="button" class="date-btn" id="dateBtn">
         <svg viewBox="0 0 24 24" aria-hidden="true" class="ic-cal">
@@ -188,10 +204,6 @@
       <div class="chips" id="catChips"></div>
     </div>
 
-    <div class="field">
-      <label class="lbl" for="note">Note <span class="muted">(optional)</span></label>
-      <input id="note" type="text" placeholder="e.g. groceries, bus fare">
-    </div>
 
     <button type="submit" class="primary" id="addBtn">Add purchase</button>
   </form>

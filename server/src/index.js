@@ -201,10 +201,10 @@ async function createEntry(request, env, ctx, user) {
   // ON CONFLICT DO NOTHING makes a retry harmless: if the phone resends after a
   // dropped connection, the same id arrives and we do not create a second row.
   const res = await env.DB.prepare(
-    `INSERT INTO entries (id, user_id, date, amount_cents, category, note)
+    `INSERT INTO entries (id, user_id, date, amount_cents, category, item)
      VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO NOTHING`
-  ).bind(id, userId, e.date, e.amount_cents, e.category, e.note).run();
+  ).bind(id, userId, e.date, e.amount_cents, e.category, e.item).run();
 
   const row = await env.DB.prepare(
     'SELECT * FROM entries WHERE id = ? AND user_id = ?'
@@ -374,15 +374,19 @@ function validateEntry(b) {
   if (!category) return { field: 'category', error: 'required' };
   if (category.length > 40) return { field: 'category', error: 'max 40 characters' };
 
-  const note = typeof b.note === 'string' ? b.note.trim() : '';
-  if (note.length > 200) return { field: 'note', error: 'max 200 characters' };
+  // Accept the old field name too, so a phone running a cached older build
+  // keeps working until its service worker picks up the new one.
+  var itemRaw = typeof b.item === 'string' ? b.item : (typeof b.note === 'string' ? b.note : '');
+  const item = itemRaw.trim();
+  if (!item) return { field: 'item', error: 'required' };
+  if (item.length > 100) return { field: 'item', error: 'max 100 characters' };
 
   const id = typeof b.id === 'string' ? b.id.trim() : '';
   if (id && !/^[A-Za-z0-9_-]{1,64}$/.test(id)) {
     return { field: 'id', error: 'must be 1-64 chars of A-Z a-z 0-9 _ -' };
   }
 
-  return { value: { id: id, date: b.date, amount_cents: b.amount_cents, category: category, note: note } };
+  return { value: { id: id, date: b.date, amount_cents: b.amount_cents, category: category, item: item } };
 }
 
 // Right shape AND a day that exists.
@@ -408,7 +412,7 @@ function toApi(row) {
     date: row.date,
     amount_cents: row.amount_cents,
     category: row.category,
-    note: row.note,
+    item: row.item,
     created_at: row.created_at,
     updated_at: row.updated_at
   };

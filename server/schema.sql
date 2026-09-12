@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS entries (
   date          TEXT NOT NULL CHECK (date LIKE '____-__-__'),
   amount_cents  INTEGER NOT NULL CHECK (amount_cents > 0),
   category      TEXT NOT NULL,
-  note          TEXT NOT NULL DEFAULT '',
+  item          TEXT NOT NULL DEFAULT '',   -- what was bought
 
   receipt_id    TEXT,                     -- reserved: filled in when scanning lands
 

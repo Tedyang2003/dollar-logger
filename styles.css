@@ -1,31 +1,37 @@
-/* ---------- tokens ---------- */
+/* ---------- tokens ----------
+   Purple palette, measured against WCAG 2.1 rather than eyeballed: every
+   text pairing here clears 4.5:1 and every chart/border pairing clears its
+   threshold. Mid-tone purples are a contrast trap - too dark for black text,
+   too light for white - so the accent sits deep in light mode and light in
+   dark mode, never in the middle. */
 :root{
-  --bg:#f6f7f9;
+  --bg:#faf7fe;
   --surface:#ffffff;
-  --surface-2:#eef0f4;
-  --text:#14181d;
-  --muted:#6b7480;
-  --line:#dfe3e9;
-  --accent:#1f7a4d;
+  --surface-2:#f2ecfb;
+  --text:#1b1725;
+  --muted:#5f5873;
+  --line:#e6dcf5;
+  --accent:#6532cf;
   --accent-ink:#ffffff;
   --danger:#b3261e;
-  --bar:#2f9e68;
+  --bar:#7c4dea;
   --radius:14px;
   --tabh:58px;
   --safe-b:env(safe-area-inset-bottom,0px);
 }
 @media (prefers-color-scheme: dark){
   :root{
-    --bg:#111417;
-    --surface:#191d22;
-    --surface-2:#22272e;
-    --text:#e8ecf1;
-    --muted:#98a2ae;
-    --line:#2c323a;
-    --accent:#2f9e68;
-    --accent-ink:#08130d;
+    /* Not pure black: #000 causes halation against light text. */
+    --bg:#141019;
+    --surface:#1c1726;
+    --surface-2:#272033;
+    --text:#e9e3f2;      /* dimmed off pure white, which is tiring on dark */
+    --muted:#a49bba;
+    --line:#332b42;
+    --accent:#b596ff;
+    --accent-ink:#1a0d33;
     --danger:#e5695f;
-    --bar:#3fbf82;
+    --bar:#9d78ff;
   }
 }
 
@@ -415,3 +421,73 @@ body.gated{overflow:hidden}
 }
 .acct-email{font-weight:600;margin-bottom:8px;word-break:break-all}
 .acct-sync{justify-content:center;font-size:.85rem;color:var(--muted);font-weight:400}
+
+/* ---------- day bar (Google-Calendar style) ---------- */
+.daybar{
+  position:sticky;top:0;z-index:15;
+  background:var(--bg);
+  margin:-16px -16px 12px;
+  padding:10px 16px 8px;
+  border-bottom:1px solid var(--line);
+}
+.daybar-title{
+  display:flex;align-items:center;gap:4px;
+  background:transparent;border:0;color:var(--text);
+  font-size:1.05rem;font-weight:650;cursor:pointer;
+  padding:6px 6px 6px 0;margin-bottom:4px;
+}
+.daybar-title svg{width:18px;height:18px;color:var(--muted)}
+
+.weekstrip{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.wday{
+  display:flex;flex-direction:column;align-items:center;gap:4px;
+  background:transparent;border:0;color:var(--muted);
+  padding:4px 0 6px;cursor:pointer;border-radius:12px;
+}
+.wday .dow{font-size:.66rem;letter-spacing:.04em}
+.wday .num{
+  width:34px;height:34px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:.9rem;color:var(--text);position:relative;
+}
+.wday.today .num{box-shadow:inset 0 0 0 1.5px var(--accent);color:var(--accent);font-weight:650}
+.wday.sel .num{background:var(--accent);color:var(--accent-ink);font-weight:650;box-shadow:none}
+.wday:disabled{opacity:.3;cursor:default}
+.wday .dot{
+  width:4px;height:4px;border-radius:50%;background:var(--accent);
+  opacity:0;margin-top:-2px;
+}
+.wday.has .dot{opacity:1}
+.wday.sel .dot{background:var(--accent)}
+
+/* ---------- day area ---------- */
+.dayarea{touch-action:pan-y}
+.dayarea.slide-l{animation:slideL .18s ease}
+.dayarea.slide-r{animation:slideR .18s ease}
+@keyframes slideL{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
+@keyframes slideR{from{opacity:0;transform:translateX(-18px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){
+  .dayarea.slide-l,.dayarea.slide-r{animation:none}
+}
+
+.day-total{
+  display:flex;justify-content:space-between;align-items:baseline;
+  padding:14px 16px;border-radius:var(--radius);
+  background:var(--surface-2);margin-bottom:14px;
+}
+.day-total strong{font-size:1.35rem}
+
+/* ---------- entry rows with category icons ---------- */
+.cat-badge{
+  width:38px;height:38px;border-radius:12px;flex:none;
+  background:var(--surface-2);color:var(--accent);
+  display:flex;align-items:center;justify-content:center;
+}
+.cat-badge svg{width:20px;height:20px}
+.entry .item{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.entry .cat{font-size:.8rem;color:var(--muted);font-weight:400}
+.entry .meta{display:flex;flex-direction:column;gap:1px}
+
+/* chips carry their icon too */
+.chip{display:inline-flex;align-items:center;gap:7px}
+.chip svg{width:16px;height:16px;flex:none}

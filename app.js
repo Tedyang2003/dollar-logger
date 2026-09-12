@@ -19,6 +19,7 @@
 
   var ui = {
     view: 'log',
+    day: null,     // 'YYYY-MM-DD' currently shown in the Log tab
     cat: null,     // selected category on the log form
     month: null,   // Date pinned to the 1st of the shown month
     year: null     // Number
@@ -205,6 +206,34 @@
     }).sort(function (a, b) { return b.total - a.total; });
   }
 
+  /* ============================ category icons ============================ */
+
+  /* 24x24 stroke paths, drawn to read at 18px on a phone. Categories the user
+     invents fall back to a tag, so a custom category never renders blank. */
+  var CAT_ICONS = {
+    Food:      ['M6 2v7M9 2v7M6 9h3M7.5 9v13', 'M17 2c-1.6 2-2.5 4.2-2.5 6.5 0 1.7.9 2.9 2.5 3.3V22'],
+    Transport: ['M4 17v-5l2-5h12l2 5v5', 'M4 17h16M7 17v2M17 17v2', 'M7.5 13h2M14.5 13h2'],
+    Shopping:  ['M6 8h12l-1 13H7L6 8z', 'M9 8V6a3 3 0 0 1 6 0v2'],
+    Bills:     ['M6 3h12v18l-3-2-3 2-3-2-3 2V3z', 'M9.5 8h5M9.5 12h5'],
+    Fun:       ['M9 18V5l10-2v13', 'M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0z', 'M19 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z'],
+    Health:    ['M12 20.5S4 16 4 10.5A4.2 4.2 0 0 1 12 8a4.2 4.2 0 0 1 8 2.5c0 5.5-8 10-8 10z'],
+    Other:     ['M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0l-7.2-7.2A2 2 0 0 1 2.8 12V4.8A2 2 0 0 1 4.8 2.8H12a2 2 0 0 1 1.4.6l7.2 7.2a2 2 0 0 1 0 2.8z', 'M7.5 7.5h.01']
+  };
+  var FALLBACK_ICON = CAT_ICONS.Other;
+
+  function catIcon(category) {
+    var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+
+    (CAT_ICONS[category] || FALLBACK_ICON).forEach(function (d) {
+      var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', d);
+      svg.appendChild(path);
+    });
+    return svg;
+  }
+
   /* ============================ DOM helpers ============================ */
 
   function $(id) { return document.getElementById(id); }
@@ -231,12 +260,13 @@
   function entryNode(e) {
     var li = el('li', 'entry');
 
+    var badge = el('div', 'cat-badge');
+    badge.appendChild(catIcon(e.category));
+    li.appendChild(badge);
+
     var meta = el('div', 'meta');
-    var top = el('div', 'top');
-    top.appendChild(el('span', 'cat', e.category || 'Other'));
-    if (e.note) top.appendChild(el('span', 'note', e.note));
-    meta.appendChild(top);
-    meta.appendChild(el('span', 'when', prettyDay(e.date)));
+    meta.appendChild(el('div', 'item', e.item || e.note || e.category || 'Purchase'));
+    meta.appendChild(el('span', 'cat', e.category || 'Other'));
 
     var del = el('button', 'del', '×');
     del.type = 'button';
@@ -303,22 +333,102 @@
     wrap.innerHTML = '';
     if (ui.cat === null || db.categories.indexOf(ui.cat) === -1) ui.cat = db.categories[0];
     db.categories.forEach(function (c) {
-      var b = el('button', 'chip' + (c === ui.cat ? ' on' : ''), c);
+      var b = el('button', 'chip' + (c === ui.cat ? ' on' : ''));
       b.type = 'button';
+      b.appendChild(catIcon(c));
+      b.appendChild(el('span', null, c));
       b.addEventListener('click', function () { ui.cat = c; renderCatChips(); });
       wrap.appendChild(b);
     });
   }
 
+  function entriesOn(key) {
+    return db.entries.filter(function (e) { return e.date === key; })
+                     .sort(function (a, b) { return (b.created || '') < (a.created || '') ? -1 : 1; });
+  }
+
+  /* Sunday-first week containing the given day, the way a calendar grid runs. */
+  function weekOf(key) {
+    var d = fromKey(key);
+    d.setDate(d.getDate() - d.getDay());
+    var out = [];
+    for (var i = 0; i < 7; i++) {
+      out.push(toKey(d));
+      d.setDate(d.getDate() + 1);
+    }
+    return out;
+  }
+
+  function setDay(key, direction) {
+    var today = todayKey();
+    if (key > today) key = today;          // you cannot have spent money yet
+    ui.day = key;
+    renderLog();
+
+    if (direction) {
+      var area = $('dayArea');
+      area.classList.remove('slide-l', 'slide-r');
+      void area.offsetWidth;               // restart the animation
+      area.classList.add(direction > 0 ? 'slide-l' : 'slide-r');
+    }
+  }
+
+  function shiftDay(days) {
+    var d = fromKey(ui.day);
+    d.setDate(d.getDate() + days);
+    var key = toKey(d);
+    if (key > todayKey()) return;          // nothing to see in the future
+    setDay(key, days);
+  }
+
   function renderLog() {
+    if (!ui.day) ui.day = todayKey();
+
+    var d = fromKey(ui.day);
+    $('dayTitleText').textContent = MONTHS[d.getMonth()] + ' ' + d.getFullYear();
+
+    // week strip
+    var today = todayKey();
+    var busy = {};
+    db.entries.forEach(function (e) { busy[e.date] = true; });
+
+    var strip = $('weekStrip');
+    strip.innerHTML = '';
+    weekOf(ui.day).forEach(function (key) {
+      var dd = fromKey(key);
+      var cls = 'wday';
+      if (key === ui.day) cls += ' sel';
+      if (key === today) cls += ' today';
+      if (busy[key]) cls += ' has';
+
+      var b = el('button', cls);
+      b.type = 'button';
+      b.appendChild(el('span', 'dow', DAYS3[dd.getDay()].charAt(0)));
+      b.appendChild(el('span', 'num', String(dd.getDate())));
+      b.appendChild(el('span', 'dot'));
+
+      if (key > today) b.disabled = true;
+      else b.addEventListener('click', (function (k) {
+        return function () { setDay(k, k > ui.day ? 1 : (k < ui.day ? -1 : 0)); };
+      })(key));
+
+      strip.appendChild(b);
+    });
+
+    // the day itself
+    var list = entriesOn(ui.day);
+    $('dayLabel').textContent = prettyDay(ui.day);
+    $('dayTotal').textContent = money(sum(list));
+
+    var host = $('dayEntries');
+    host.innerHTML = '';
+    if (!list.length) {
+      host.appendChild(el('li', 'empty', 'Nothing logged on this day.'));
+    } else {
+      list.forEach(function (e) { host.appendChild(entryNode(e)); });
+    }
+
     $('curSign').textContent = db.currency;
-
-    var today = db.entries.filter(function (e) { return e.date === todayKey(); });
-    $('todayTotal').textContent = money(sum(today));
-
-    // Cap the DOM rather than rendering years of history into one scroller.
-    renderDayGroups($('logDays'), sorted().slice(0, 150),
-                    'Nothing logged yet. Tap + to add your first purchase.');
   }
 
   function addEntry(ev) {
@@ -327,6 +437,9 @@
     var amount = parseAmount($('amount').value);
     if (isNaN(amount)) { toast('Enter an amount greater than zero.'); $('amount').focus(); return; }
 
+    var item = $('item').value.trim();
+    if (!item) { toast('What did you buy?'); $('item').focus(); return; }
+
     var date = $('date').value || todayKey();
 
     db.entries.push({
@@ -334,14 +447,15 @@
       date: date,
       amount: amount,
       category: ui.cat || 'Other',
-      note: $('note').value.trim(),
+      item: item,
       created: new Date().toISOString()
     });
     save();
 
     $('amount').value = '';
-    $('note').value = '';
+    $('item').value = '';
     closeSheet();
+    if (ui.view === 'log') ui.day = date;
     renderAll();
     toast('Logged ' + money(amount) + ' · ' + prettyDay(date));
   }
@@ -349,7 +463,7 @@
   function removeEntry(id) {
     var e = db.entries.filter(function (x) { return x.id === id; })[0];
     if (!e) return;
-    if (!confirm('Delete ' + money(e.amount) + ' (' + e.category + ', ' + prettyDay(e.date) + ')?')) return;
+    if (!confirm('Delete "' + (e.item || e.category) + '" (' + money(e.amount) + ', ' + prettyDay(e.date) + ')?')) return;
     db.entries = db.entries.filter(function (x) { return x.id !== id; });
     tombstone(id);
     save();
@@ -360,6 +474,7 @@
   /* ============================ date picker ============================ */
 
   var calMonth = null;      // Date pinned to the 1st of the displayed month
+  var calMode = 'form';     // 'form' sets the new entry's date, 'nav' moves the day view
 
   function setDate(key) {
     $('date').value = key;
@@ -375,8 +490,9 @@
     return d.getFullYear() === new Date().getFullYear() ? base : base + ' ' + d.getFullYear();
   }
 
-  function openCal() {
-    var selected = $('date').value || todayKey();
+  function openCal(mode) {
+    calMode = mode || 'form';
+    var selected = (calMode === 'nav' ? ui.day : $('date').value) || todayKey();
     var d = fromKey(selected);
     calMonth = new Date(d.getFullYear(), d.getMonth(), 1);
 
@@ -395,7 +511,7 @@
     $('calTitle').textContent = MONTHS[m] + ' ' + y;
 
     var today = todayKey();
-    var selected = $('date').value;
+    var selected = (calMode === 'nav' ? ui.day : $('date').value);
 
     // Which days already have entries - a dot under the number, like a calendar app.
     var busy = {};
@@ -429,7 +545,11 @@
         cell.disabled = true;
       } else {
         cell.addEventListener('click', (function (k) {
-          return function () { setDate(k); closeCal(); };
+          return function () {
+            if (calMode === 'nav') setDay(k, 0);
+            else setDate(k);
+            closeCal();
+          };
         })(key));
       }
       grid.appendChild(cell);
@@ -452,9 +572,9 @@
     sheetOpen = true;
     lastFocus = document.activeElement;
 
-    setDate(todayKey());
+    setDate(ui.day && ui.day <= todayKey() ? ui.day : todayKey());
     $('amount').value = '';
-    $('note').value = '';
+    $('item').value = '';
     renderCatChips();
 
     $('scrim').classList.remove('hidden');
@@ -583,13 +703,13 @@
   }
 
   function toCsv(list) {
-    var rows = [['Date', 'Year', 'Month', 'Category', 'Amount', 'Note']];
+    var rows = [['Date', 'Year', 'Month', 'Item', 'Category', 'Amount']];
     list.slice()
       .sort(function (a, b) { return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); })
       .forEach(function (e) {
         var d = fromKey(e.date);
         rows.push([e.date, d.getFullYear(), MONTHS[d.getMonth()],
-                   e.category || 'Other', e.amount.toFixed(2), e.note || '']);
+                   e.item || '', e.category || 'Other', e.amount.toFixed(2)]);
       });
     return rows.map(function (r) { return r.map(csvCell).join(','); }).join('\r\n');
   }
@@ -871,9 +991,14 @@
     $('scrim').addEventListener('click', closeSheet);
 
     // --- date picker ---
-    $('dateBtn').addEventListener('click', openCal);
+    $('dateBtn').addEventListener('click', function () { openCal('form'); });
+    $('dayTitle').addEventListener('click', function () { openCal('nav'); });
     $('calCancel').addEventListener('click', closeCal);
-    $('calToday').addEventListener('click', function () { setDate(todayKey()); closeCal(); });
+    $('calToday').addEventListener('click', function () {
+      if (calMode === 'nav') setDay(todayKey(), 0);
+      else setDate(todayKey());
+      closeCal();
+    });
     $('calPrev').addEventListener('click', function () {
       calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1);
       renderCal();
@@ -884,6 +1009,42 @@
     });
     $('calScrim').addEventListener('click', function (e) {
       if (e.target === $('calScrim')) closeCal();    // backdrop only, not the card
+    });
+
+    /* Swipe the day area left/right to change day. Deliberately strict: the
+       gesture must be clearly horizontal, or every attempt to scroll the list
+       would flick you to another day. */
+    (function () {
+      var area = $('dayArea');
+      var start = null;
+
+      area.addEventListener('touchstart', function (e) {
+        if (e.touches.length !== 1) { start = null; return; }
+        start = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() };
+      }, { passive: true });
+
+      area.addEventListener('touchend', function (e) {
+        if (!start) return;
+        var t = e.changedTouches[0];
+        var dx = t.clientX - start.x;
+        var dy = t.clientY - start.y;
+        var ms = Date.now() - start.t;
+        start = null;
+
+        if (ms > 700) return;                          // a slow drag is not a swipe
+        if (Math.abs(dx) < 55) return;                 // too small to be deliberate
+        if (Math.abs(dx) < Math.abs(dy) * 1.6) return; // mostly vertical: let it scroll
+
+        shiftDay(dx < 0 ? 1 : -1);                     // swipe left = next day
+      }, { passive: true });
+    })();
+
+    // Arrow keys do the same thing on a desktop browser.
+    document.addEventListener('keydown', function (e) {
+      if (ui.view !== 'log' || sheetOpen || accountOpen) return;
+      if (!$('calScrim').classList.contains('hidden')) return;
+      if (e.key === 'ArrowLeft') shiftDay(-1);
+      if (e.key === 'ArrowRight') shiftDay(1);
     });
 
     // Escape closes the topmost layer first.
