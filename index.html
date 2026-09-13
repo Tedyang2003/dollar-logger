@@ -212,7 +212,9 @@
 
     <div class="field">
       <label class="lbl" for="merchant">Merchant <span class="muted">(optional)</span></label>
-      <input id="merchant" type="text" placeholder="e.g. Starbucks" maxlength="60">
+      <input id="merchant" type="text" placeholder="e.g. Starbucks" maxlength="60" list="merchantList" autocomplete="off">
+      <datalist id="merchantList"></datalist>
+      <div class="amount-picks merchant-picks hidden" id="merchantPicks"></div>
     </div>
 
     <div class="field">
@@ -231,7 +233,7 @@
       <div class="chips" id="catChips"></div>
     </div>
 
-    <div class="field">
+    <div class="field" id="repeatField">
       <label class="lbl">Repeat</label>
       <div class="chips" id="repeatChips">
         <button type="button" class="chip on" data-repeat="">Never</button>

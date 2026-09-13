@@ -118,6 +118,9 @@ export default {
       if (del && request.method === 'DELETE') {
         return await deleteEntry(del[1], env, ctx, user);
       }
+      if (del && request.method === 'PATCH') {
+        return await updateEntry(del[1], request, env, ctx, user);
+      }
 
       return ctx.json({ error: 'not_found', path: url.pathname }, 404);
     } catch (err) {
@@ -191,7 +194,7 @@ function corsHeaders(request, env) {
   else if (origin && allowed.includes(origin.toLowerCase())) allow = origin;
 
   const headers = {
-    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+    'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type,Authorization',
     'Access-Control-Max-Age': '86400',
     // Responses differ by Origin, so caches must not reuse one for another.
@@ -244,6 +247,31 @@ async function createEntry(request, env, ctx, user) {
   const inserted = res.meta.changes > 0;
   if (inserted) ctx.later(checkBudgetAlert(env, userId));
   return ctx.json({ entry: toApi(row), duplicate: !inserted }, inserted ? 201 : 200);
+}
+
+/* ============================ PATCH /entries/:id ============================ */
+
+async function updateEntry(id, request, env, ctx, user) {
+  let body;
+  try { body = await request.json(); } catch (e) { return ctx.json({ error: 'invalid_json' }, 400); }
+
+  // Same rules as creating one: an edit is not a way around validation.
+  const check = validateEntry({ ...body, id });
+  if (check.error) return ctx.json({ error: 'invalid_entry', field: check.field, detail: check.error }, 400);
+  const e = check.value;
+
+  // user_id in the WHERE, as with delete: you can only edit your own rows.
+  const res = await env.DB.prepare(
+    `UPDATE entries SET date = ?, amount_cents = ?, category = ?, item = ?, merchant = ?,
+            updated_at = datetime('now')
+      WHERE id = ? AND user_id = ? AND deleted_at IS NULL`
+  ).bind(e.date, e.amount_cents, e.category, e.item, e.merchant, id, user.sub).run();
+
+  if (res.meta.changes === 0) return ctx.json({ error: 'not_found' }, 404);
+
+  ctx.later(checkBudgetAlert(env, user.sub));   // a bigger amount can cross 80%
+  const row = await env.DB.prepare('SELECT * FROM entries WHERE id = ? AND user_id = ?').bind(id, user.sub).first();
+  return ctx.json({ entry: toApi(row) });
 }
 
 /* ============================ DELETE /entries/:id ============================ */

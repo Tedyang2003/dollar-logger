@@ -25,6 +25,7 @@
     view: 'log',
     day: null,     // 'YYYY-MM-DD' currently shown in the Log tab
     repeat: '',    // '' | weekly | monthly | yearly, for the add sheet
+    editingId: null, // set while the sheet is editing an existing entry
     cat: null,     // selected category on the log form
     month: null,   // Date pinned to the 1st of the shown month
     year: null     // Number
@@ -86,10 +87,21 @@
     });
 
     var have = {};
-    db.entries.forEach(function (e) { have[e.id] = true; });
+    db.entries.forEach(function (e, i) { have[e.id] = i + 1; });
     remote.entries.forEach(function (e) {
       if (!e || !e.id || !e.date || typeof e.amount !== 'number') return;
-      if (have[e.id] || Object.prototype.hasOwnProperty.call(tomb, e.id)) return;
+      if (Object.prototype.hasOwnProperty.call(tomb, e.id)) return;
+      if (have[e.id]) {
+        /* Already here. Take the server's version if it is newer - an edit
+           made elsewhere - unless this phone has its own unsent edit, which
+           wins and is pushed on this same sync. */
+        var local = db.entries[have[e.id] - 1];
+        if (!local.dirty && e.updated && e.updated > (local.updated || '')) {
+          db.entries[have[e.id] - 1] = e;
+          changed = true;
+        }
+        return;
+      }
       db.entries.push(e);
       have[e.id] = true;
       changed = true;
@@ -322,7 +334,9 @@
     var del = el('button', 'del', '×');
     del.type = 'button';
     del.setAttribute('aria-label', 'Delete entry');
-    del.addEventListener('click', function () { removeEntry(e.id); });
+    del.addEventListener('click', function (ev) { ev.stopPropagation(); removeEntry(e.id); });
+    li.classList.add('tappable');
+    li.addEventListener('click', function () { openSheet(e); });
 
     li.appendChild(meta);
     li.appendChild(el('span', 'amt', money(e.amount)));
@@ -490,6 +504,24 @@
 
     var item = $('item').value.trim();
     if (!item) { toast('What did you buy?'); $('item').focus(); return; }
+
+    if (ui.editingId) {
+      var target = db.entries.filter(function (x) { return x.id === ui.editingId; })[0];
+      if (!target) { closeSheet(); return; }
+      target.amount = amount;
+      target.item = item;
+      target.merchant = $('merchant').value.trim();
+      target.date = $('date').value || target.date;
+      target.category = ui.cat || target.category;
+      target.dirty = true;               // pushed to the server on the next sync
+      target.editRev = (target.editRev || 0) + 1;
+      save();
+      closeSheet();
+      if (ui.view === 'log') ui.day = target.date;
+      renderAll();
+      toast('Saved.');
+      return;
+    }
 
     /* A repeating purchase is created on the server, which logs this and every
        future charge itself - so nothing is written locally here, and the entry
@@ -814,21 +846,91 @@
     }).then(renderPush);
   }
 
+  /* ============================ merchant suggestions ============================ */
+
+  /* Past merchants, most used first, with the category most often used there. */
+  function merchantStats() {
+    var map = {};
+    db.entries.forEach(function (e) {
+      var name = (e.merchant || '').trim();
+      if (!name) return;
+      var k = name.toLowerCase();
+      var m = map[k] || (map[k] = { name: name, count: 0, cats: {}, last: '' });
+      m.count++;
+      m.cats[e.category] = (m.cats[e.category] || 0) + 1;
+      if (e.date >= m.last) { m.last = e.date; m.name = name; }   // keep the latest spelling
+    });
+    return Object.keys(map).map(function (k) { return map[k]; })
+      .sort(function (a, b) { return b.count - a.count || (a.last < b.last ? 1 : -1); });
+  }
+
+  function usualCategory(merchant) {
+    var k = String(merchant || '').trim().toLowerCase();
+    var m = merchantStats().filter(function (x) { return x.name.toLowerCase() === k; })[0];
+    if (!m) return null;
+    return Object.keys(m.cats).sort(function (a, b) { return m.cats[b] - m.cats[a]; })[0];
+  }
+
+  function renderMerchantPicks() {
+    var stats = merchantStats();
+
+    var list = $('merchantList');
+    list.innerHTML = '';
+    stats.slice(0, 50).forEach(function (m) {
+      var o = document.createElement('option'); o.value = m.name; list.appendChild(o);
+    });
+
+    var box = $('merchantPicks');
+    box.innerHTML = '';
+    stats.slice(0, 6).forEach(function (m) {
+      var b = el('button', 'pick', m.name);
+      b.type = 'button';
+      b.addEventListener('click', function () { $('merchant').value = m.name; onMerchantChosen(); });
+      box.appendChild(b);
+    });
+    box.classList.toggle('hidden', !stats.length);
+  }
+
+  var catTouched = false;   // don't override a category the user picked by hand
+  function onMerchantChosen() {
+    if (catTouched) return;
+    var c = usualCategory($('merchant').value);
+    if (c && db.categories.indexOf(c) !== -1) { ui.cat = c; renderCatChips(); }
+  }
+
   /* ============================ add sheet ============================ */
 
   var sheetOpen = false;
   var lastFocus = null;
 
-  function openSheet() {
+  function openSheet(entry) {
     if (sheetOpen) return;
     sheetOpen = true;
     lastFocus = document.activeElement;
+    // Called from a click handler, openSheet receives an Event - only a real entry means edit.
+    var editing = entry && entry.id ? entry : null;
+    ui.editingId = editing ? editing.id : null;
 
     setDate(ui.day && ui.day <= todayKey() ? ui.day : todayKey());
     $('amount').value = '';
     $('item').value = '';
     $('merchant').value = '';
     ['amount', 'item', 'merchant'].forEach(function (id) { $(id).classList.remove('filled'); });
+    renderMerchantPicks();
+    $('sheetTitle').textContent = editing ? 'Edit purchase' : 'New purchase';
+    $('sheetSave').textContent = editing ? 'Save' : 'Add';
+    $('addBtn').textContent = editing ? 'Save changes' : 'Add purchase';
+    // Scanning and repeating are for new purchases only.
+    $('scanBtn').classList.toggle('hidden', !!editing);
+    $('repeatField').classList.toggle('hidden', !!editing);
+    if (editing) {
+      $('amount').value = editing.amount.toFixed(2);
+      $('item').value = editing.item || editing.note || '';
+      $('merchant').value = editing.merchant || '';
+      setDate(editing.date);
+      ui.cat = editing.category || ui.cat;
+      renderCatChips();
+    }
     setRepeat('');
     $('amountPicks').classList.add('hidden');
     renderCatChips();
@@ -854,6 +956,7 @@
   function closeSheet() {
     if (!sheetOpen) return;
     sheetOpen = false;
+    ui.editingId = null;
 
     $('scrim').classList.remove('show');
     $('addSheet').classList.remove('show');
@@ -1279,6 +1382,13 @@
 
     window.DollarApi.init({
       getState: function () { return db; },
+      markSynced: function (entry, updatedAt, sentRev) {
+        entry.updated = updatedAt || entry.updated;
+        // Clear the flag only if no newer edit happened while the request was in flight.
+        if (entry.editRev === sentRev) delete entry.dirty;
+        try { localStorage.setItem(STORE_KEY, JSON.stringify(db)); } catch (e) {}
+      },
+
       mergeRemote: mergeRemote,
       onStatus: function (s) {
         var dot = $('apiDot');
@@ -1365,6 +1475,9 @@
     // --- add sheet ---
     $('fabAdd').addEventListener('click', openSheet);
     $('scanInput').addEventListener('change', onScan);
+    $('merchant').addEventListener('change', onMerchantChosen);
+    $('catChips').addEventListener('click', function () { catTouched = true; });
+    $('fabAdd').addEventListener('click', function () { catTouched = false; });
     $('pushBtn').addEventListener('click', togglePush);
     $('pushTest').addEventListener('click', function () {
       window.DollarApi.call('POST', '/push/test').then(function (r) {

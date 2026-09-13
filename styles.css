@@ -541,3 +541,8 @@ body.gated{overflow:hidden}
 .budget-grid span{display:block;font-size:.75rem;color:var(--muted)}
 .budget-grid b{font-size:1.05rem}
 .link-btn{background:none;border:0;color:var(--accent);font-weight:600;cursor:pointer;padding:4px 0}
+
+/* ---------- edit + merchant picks ---------- */
+.entry.tappable{cursor:pointer}
+.entry.tappable:active{background:var(--surface-2)}
+.merchant-picks{margin:8px 0 0}

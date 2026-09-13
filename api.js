@@ -16,7 +16,7 @@ window.DollarApi = (function () {
   var DEBOUNCE_MS = 2000;
   var PAGE_LIMIT = 200;
 
-  var api = null;          // {getState, mergeRemote, onStatus}
+  var api = null;          // {getState, mergeRemote, onStatus, markSynced}
   var pending = null;
   var syncing = false;
   var queued = false;
@@ -59,6 +59,7 @@ window.DollarApi = (function () {
       amount: row.amount_cents / 100,
       category: row.category || 'Other',
       item: row.item || '',
+      updated: row.updated_at || '',
       subscription_id: row.subscription_id || null,
       merchant: row.merchant || '',
       created: row.created_at || ''
@@ -148,6 +149,8 @@ window.DollarApi = (function () {
 
         var toPush = state.entries.filter(function (e) { return !serverIds[e.id]; });
         var toDelete = (state.deleted || []).filter(function (t) { return serverIds[t.id]; });
+        // Edited entries the server already has: send the new values.
+        var toUpdate = state.entries.filter(function (e) { return e.dirty && serverIds[e.id]; });
 
         return sequence(toPush.map(function (e) {
           return function () { return request('/entries', {
@@ -155,7 +158,19 @@ window.DollarApi = (function () {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(toApi(e))
           }); };
-        }).concat(toDelete.map(function (t) {
+        }).concat(toUpdate.map(function (e) {
+          var sentRev = e.editRev;
+          return function () {
+            return request('/entries/' + encodeURIComponent(e.id), {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(toApi(e))
+            }).then(function (body) {
+              // Only clear the flag if nothing was edited again mid-request.
+              if (body && body.entry && api.markSynced) api.markSynced(e, body.entry.updated_at, sentRev);
+            });
+          };
+        })).concat(toDelete.map(function (t) {
           return function () { return request('/entries/' + encodeURIComponent(t.id), { method: 'DELETE' }); };
         }))).then(function () {
           return { pushed: toPush.length, removed: toDelete.length, pulled: rows.length };
