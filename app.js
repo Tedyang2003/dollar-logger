@@ -12,7 +12,8 @@
     entries: [],   // {id, date:'YYYY-MM-DD', amount:Number, category:String, note:String, created:ISO}
     deleted: [],   // tombstones {id, at} - without these, sync would re-add deleted entries
     categories: DEFAULT_CATS.slice(),
-    currency: '$'
+    currency: '$',
+    budget: 0      // monthly budget in dollars; 0 = not set
   };
 
   var applyingRemote = false;   // suppresses the sync loop while merging server data
@@ -38,6 +39,7 @@
       if (parsed && Array.isArray(parsed.deleted)) db.deleted = parsed.deleted;
       if (parsed && Array.isArray(parsed.categories) && parsed.categories.length) db.categories = parsed.categories;
       if (parsed && typeof parsed.currency === 'string' && parsed.currency) db.currency = parsed.currency;
+      if (parsed && typeof parsed.budget === 'number' && parsed.budget > 0) db.budget = parsed.budget;
     } catch (e) {
       toast('Saved data looked corrupted and was skipped.');
     }
@@ -235,6 +237,47 @@
     return svg;
   }
 
+  var KNOWN_CATS = { food: 1, transport: 1, shopping: 1, bills: 1, fun: 1, health: 1, other: 1 };
+  function catClass(name) {
+    var k = String(name || '').toLowerCase();
+    return 'cat-' + (KNOWN_CATS[k] ? k : 'other');
+  }
+
+  /* ============================ budget maths ============================ */
+
+  /* All in cents, so "left per day" never shows float noise. `today` is a
+     'YYYY-MM-DD' key. Days left INCLUDES today: on the last day of the month
+     you still have one day to spend in, not zero. */
+  function budgetStatus(spent, budget, y, m, today) {
+    var spentC = Math.round(spent * 100), budgetC = Math.round(budget * 100);
+    var dim = new Date(y, m + 1, 0).getDate();
+    var monthKey = y + '-' + pad(m + 1);
+    var nowKey = today.slice(0, 7);
+
+    var daysLeft, pace;                       // pace: share of the month elapsed, 0..1
+    if (monthKey < nowKey) { daysLeft = 0; pace = 1; }
+    else if (monthKey > nowKey) { daysLeft = dim; pace = 0; }
+    else {
+      var d = Number(today.slice(8, 10));
+      daysLeft = dim - d + 1;
+      pace = d / dim;                         // through the end of today
+    }
+
+    var leftC = budgetC - spentC;
+    var expectedC = Math.round(budgetC * pace);
+    var state = spentC > budgetC ? 'bad' : (spentC > expectedC && daysLeft > 0 ? 'warn' : 'good');
+
+    return {
+      state: state,
+      leftC: leftC,
+      daysLeft: daysLeft,
+      perDayC: daysLeft > 0 ? Math.floor(Math.max(leftC, 0) / daysLeft) : null,
+      expectedC: expectedC,
+      pace: pace,
+      usedShare: budgetC > 0 ? spentC / budgetC : 0
+    };
+  }
+
   /* ============================ DOM helpers ============================ */
 
   function $(id) { return document.getElementById(id); }
@@ -261,7 +304,7 @@
   function entryNode(e) {
     var li = el('li', 'entry');
 
-    var badge = el('div', 'cat-badge');
+    var badge = el('div', 'cat-badge ' + catClass(e.category));
     badge.appendChild(catIcon(e.category));
     li.appendChild(badge);
 
@@ -283,7 +326,7 @@
   }
 
   function barRow(label, value, max, total) {
-    var row = el('div', 'bar-row');
+    var row = el('div', 'bar-row ' + catClass(label));
 
     var top = el('div', 'bar-top');
     top.appendChild(el('span', null, label));
@@ -690,7 +733,7 @@
       if (!list.length) { host.appendChild(el('li', 'empty', 'No repeating purchases. Pick Repeat when adding one.')); return; }
       list.forEach(function (s) {
         var li = el('li', 'entry');
-        var badge = el('div', 'cat-badge'); badge.appendChild(catIcon(s.category)); li.appendChild(badge);
+        var badge = el('div', 'cat-badge ' + catClass(s.category)); badge.appendChild(catIcon(s.category)); li.appendChild(badge);
         var meta = el('div', 'meta');
         meta.appendChild(el('div', 'item', s.item));
         meta.appendChild(el('span', 'cat', s.interval.charAt(0).toUpperCase() + s.interval.slice(1) + ' · next ' + prettyDay(s.next_date)));
@@ -792,7 +835,71 @@
       grouped.forEach(function (g) { cats.appendChild(barRow(g.category, g.total, max, total)); });
     }
 
+    renderBudget(y, m, total);
     renderDayGroups($('monthDays'), list, 'No purchases this month.');
+  }
+
+  function renderBudget(y, m, spent) {
+    var card = $('budgetCard');
+    card.innerHTML = '';
+    card.className = 'budget-card';
+
+    var edit = el('button', 'link-btn', db.budget ? 'Edit' : 'Set a monthly budget');
+    edit.type = 'button';
+    edit.addEventListener('click', function () {
+      var v = prompt('Monthly budget (' + db.currency + '), blank to remove:', db.budget ? db.budget.toFixed(2) : '');
+      if (v === null) return;
+      var n = parseAmount(v);
+      db.budget = isNaN(n) ? 0 : n;
+      save();
+      renderMonth();
+    });
+
+    if (!db.budget) {
+      card.appendChild(el('span', 'muted', 'No budget set. '));
+      card.appendChild(edit);
+      return;
+    }
+
+    var st = budgetStatus(spent, db.budget, y, m, todayKey());
+    card.classList.add(st.state);
+
+    var top = el('div', 'budget-top');
+    var label = el('div');
+    label.appendChild(el('span', 'muted small', 'Budget ' + money(db.budget) + ' · '));
+    label.appendChild(edit);
+    top.appendChild(label);
+    top.appendChild(el('strong', 'budget-state',
+      st.leftC >= 0 ? money(st.leftC / 100) + ' left' : 'Over by ' + money(-st.leftC / 100)));
+    card.appendChild(top);
+
+    var track = el('div', 'budget-track');
+    var fill = el('div', 'budget-fill');
+    fill.style.width = Math.min(st.usedShare, 1) * 100 + '%';
+    track.appendChild(fill);
+    if (st.pace > 0 && st.pace < 1) {
+      var mark = el('div', 'budget-pace');           // where spending "should" be today
+      mark.style.left = st.pace * 100 + '%';
+      track.appendChild(mark);
+    }
+    card.appendChild(track);
+
+    card.appendChild(el('span', 'muted small',
+      Math.round(st.usedShare * 100) + '% used' +
+      (st.state === 'warn' ? ' · ahead of pace' : st.state === 'bad' ? ' · over budget' : ' · on track')));
+
+    var grid = el('div', 'budget-grid');
+    function cell(title, value) {
+      var c = el('div'); c.appendChild(el('span', null, title)); c.appendChild(el('b', null, value)); grid.appendChild(c);
+    }
+    if (st.daysLeft > 0) {
+      cell('Can spend per day', st.perDayC > 0 ? money(st.perDayC / 100) : money(0));
+      cell('Days left', st.daysLeft + (st.daysLeft === 1 ? ' day' : ' days') + (st.pace > 0 ? ' incl. today' : ''));
+    } else {
+      cell('Month result', st.leftC >= 0 ? 'Under by ' + money(st.leftC / 100) : 'Over by ' + money(-st.leftC / 100));
+      cell('Spent', money(spent));
+    }
+    card.appendChild(grid);
   }
 
   /* ============================ YEAR view ============================ */

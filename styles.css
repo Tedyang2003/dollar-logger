@@ -1,41 +1,26 @@
 /* ---------- tokens ----------
-   Cool slate neutrals carry the whole interface; indigo appears ONLY on things
-   you can act on - the add button, the selected day, the primary button, the
-   active tab. That restraint is the point: when the accent is everywhere it
-   stops meaning anything, which is what went wrong with the first attempt.
-
-   Every pairing below is measured against WCAG 2.1, not eyeballed. Lowest
-   ratio in the app is 5.85:1 where 4.5:1 is required. */
+   Neutral greys with no blue cast carry the interface. Indigo marks things you
+   can act on; green/amber/red mean status; each category has its own hue.
+   Every pairing is measured against WCAG 2.1 (text 4.5:1, icons 3:1). */
 :root{
-  --bg:#f7f9fb;
-  --surface:#ffffff;
-  --surface-2:#eef1f5;
-  --text:#121823;
-  --muted:#59626f;
-  --line:#d9e0e8;
-  --accent:#4a42cf;
-  --accent-ink:#ffffff;
-  --accent-soft:#ecebfb;   /* faint accent wash, for selected states only */
-  --danger:#b3261e;
-  --bar:#5b57e0;
-  --radius:14px;
-  --tabh:58px;
-  --safe-b:env(safe-area-inset-bottom,0px);
+  --bg:#f6f6f7; --surface:#ffffff; --surface-2:#eeeef0;
+  --text:#18181b; --muted:#5c5c64; --line:#dcdce1;
+  --accent:#4a42cf; --accent-ink:#ffffff; --accent-soft:#ecebfb;
+  --good:#1b7a43; --warn:#9a5b00; --bad:#c0262d; --danger:#c0262d;
+  --bar:#4a42cf;
+  --c-food:#c2410c; --c-transport:#1d6fb8; --c-shopping:#a21caf; --c-bills:#8a6100;
+  --c-fun:#6d3fd0; --c-health:#be123c; --c-other:#52525b;
+  --radius:14px; --tabh:58px; --safe-b:env(safe-area-inset-bottom,0px);
 }
 @media (prefers-color-scheme: dark){
   :root{
-    /* Not pure black: #000 causes halation against light text. */
-    --bg:#0f141b;
-    --surface:#171e28;
-    --surface-2:#212b38;
-    --text:#e3e9f1;      /* dimmed off pure white, which is tiring on dark */
-    --muted:#97a3b4;
-    --line:#2a3543;
-    --accent:#9aa6ff;
-    --accent-ink:#111536;
-    --accent-soft:#1e2440;
-    --danger:#e5695f;
-    --bar:#818cf8;
+    --bg:#111113; --surface:#1b1b1e; --surface-2:#26262a;
+    --text:#ececef; --muted:#a1a1aa; --line:#313136;
+    --accent:#9aa6ff; --accent-ink:#111536; --accent-soft:#23254a;
+    --good:#4ade80; --warn:#fbbf24; --bad:#f87171; --danger:#f87171;
+    --bar:#9aa6ff;
+    --c-food:#fb923c; --c-transport:#60a5fa; --c-shopping:#e879f9; --c-bills:#facc15;
+    --c-fun:#a78bfa; --c-health:#fb7185; --c-other:#a1a1aa;
   }
 }
 
@@ -529,3 +514,30 @@ body.gated{overflow:hidden}
 
 /* Paint below the bar so no strip of page background can ever show under it. */
 .tabbar::after{content:'';position:absolute;left:0;right:0;top:100%;height:120px;background:var(--surface)}
+
+/* ---------- category colours ---------- */
+.cat-food{--cat:var(--c-food)} .cat-transport{--cat:var(--c-transport)}
+.cat-shopping{--cat:var(--c-shopping)} .cat-bills{--cat:var(--c-bills)}
+.cat-fun{--cat:var(--c-fun)} .cat-health{--cat:var(--c-health)}
+.cat-other{--cat:var(--c-other)}
+.cat-badge{color:var(--cat,var(--muted));background:color-mix(in srgb,var(--cat,var(--muted)) 14%,var(--surface))}
+.bar-fill{background:var(--cat,var(--bar))}
+
+/* ---------- budget ---------- */
+.budget-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-top:12px}
+.budget-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.budget-top strong{font-size:1.25rem}
+.budget-track{height:10px;border-radius:99px;background:var(--surface-2);overflow:hidden;margin:12px 0 6px;position:relative}
+.budget-fill{height:100%;border-radius:99px;background:var(--good)}
+.budget-pace{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--text);opacity:.45}
+.budget-card.warn .budget-fill{background:var(--warn)}
+.budget-card.bad .budget-fill{background:var(--bad)}
+.budget-state{font-weight:650}
+.budget-card.good .budget-state{color:var(--good)}
+.budget-card.warn .budget-state{color:var(--warn)}
+.budget-card.bad .budget-state{color:var(--bad)}
+.budget-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.budget-grid div{background:var(--surface-2);border-radius:10px;padding:10px 12px}
+.budget-grid span{display:block;font-size:.75rem;color:var(--muted)}
+.budget-grid b{font-size:1.05rem}
+.link-btn{background:none;border:0;color:var(--accent);font-weight:600;cursor:pointer;padding:4px 0}
