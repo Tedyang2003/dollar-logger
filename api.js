@@ -211,6 +211,14 @@ window.DollarApi = (function () {
 
     syncNow: runSync,
 
+    call: function (method, path, body) {
+      return request(path, {
+        method: method,
+        headers: body ? { 'Content-Type': 'application/json' } : {},
+        body: body ? JSON.stringify(body) : undefined
+      });
+    },
+
     subscriptions: function (method, path, body) {
       return request('/subscriptions' + (path || ''), {
         method: method,

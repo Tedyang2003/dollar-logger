@@ -13,7 +13,9 @@
     deleted: [],   // tombstones {id, at} - without these, sync would re-add deleted entries
     categories: DEFAULT_CATS.slice(),
     currency: '$',
-    budget: 0      // monthly budget in dollars; 0 = not set
+    budget: 0,     // monthly budget in dollars; 0 = not set (source of truth: server)
+    rollover: false,
+    budgetSince: null
   };
 
   var applyingRemote = false;   // suppresses the sync loop while merging server data
@@ -40,6 +42,8 @@
       if (parsed && Array.isArray(parsed.categories) && parsed.categories.length) db.categories = parsed.categories;
       if (parsed && typeof parsed.currency === 'string' && parsed.currency) db.currency = parsed.currency;
       if (parsed && typeof parsed.budget === 'number' && parsed.budget > 0) db.budget = parsed.budget;
+      if (parsed && typeof parsed.rollover === 'boolean') db.rollover = parsed.rollover;
+      if (parsed && typeof parsed.budgetSince === 'string') db.budgetSince = parsed.budgetSince;
     } catch (e) {
       toast('Saved data looked corrupted and was skipped.');
     }
@@ -751,6 +755,64 @@
     }).catch(function () { /* offline: leave the list as it was */ });
   }
 
+  /* ============================ notifications ============================ */
+
+  function standalone() {
+    return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+  }
+
+  function urlB64ToBytes(s) {
+    var p = s.replace(/-/g, '+').replace(/_/g, '/'); while (p.length % 4) p += '=';
+    var raw = atob(p), out = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+
+  function renderPush() {
+    var btn = $('pushBtn'), test = $('pushTest'), status = $('pushStatus'), dot = $('pushDot'), help = $('pushHelp');
+    var supported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+
+    if (!supported || !standalone()) {
+      status.textContent = 'Not available here';
+      dot.className = 'sync-dot off';
+      help.textContent = 'On iPhone, notifications only work from the home-screen app (Share > Add to Home Screen, iOS 16.4+).';
+      btn.classList.add('hidden'); test.classList.add('hidden');
+      return;
+    }
+    navigator.serviceWorker.ready.then(function (reg) { return reg.pushManager.getSubscription(); }).then(function (sub) {
+      var on = !!sub && Notification.permission === 'granted';
+      status.textContent = on ? 'On - alerts at 80% of budget' : (Notification.permission === 'denied' ? 'Blocked in Settings' : 'Off');
+      dot.className = 'sync-dot ' + (on ? 'ok' : 'idle');
+      btn.classList.remove('hidden');
+      btn.textContent = on ? 'Turn off budget alerts' : 'Turn on budget alerts';
+      test.classList.toggle('hidden', !on);
+      if (Notification.permission === 'denied') help.textContent = 'Notifications are blocked. Enable them in Settings > Notifications > Dollar Logger.';
+    });
+  }
+
+  function togglePush() {
+    navigator.serviceWorker.ready.then(function (reg) {
+      return reg.pushManager.getSubscription().then(function (existing) {
+        if (existing) {
+          return window.DollarApi.call('DELETE', '/push', { endpoint: existing.endpoint })
+            .catch(function () {}).then(function () { return existing.unsubscribe(); })
+            .then(function () { toast('Budget alerts off.'); });
+        }
+        if (!ui.vapidKey) throw new Error('no_key');
+        // Must run from the tap itself: iOS only shows the prompt for a user gesture.
+        return Notification.requestPermission().then(function (perm) {
+          if (perm !== 'granted') throw new Error('denied');
+          return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToBytes(ui.vapidKey) });
+        }).then(function (sub) {
+          return window.DollarApi.call('POST', '/push', sub.toJSON());
+        }).then(function () { toast('Budget alerts on.'); });
+      });
+    }).catch(function (err) {
+      var m = String(err && err.message);
+      toast(m === 'denied' ? 'Notifications were not allowed.' : m === 'no_key' ? 'Still loading - try again in a moment.' : 'Could not change notifications.');
+    }).then(renderPush);
+  }
+
   /* ============================ add sheet ============================ */
 
   var sheetOpen = false;
@@ -850,9 +912,7 @@
       var v = prompt('Monthly budget (' + db.currency + '), blank to remove:', db.budget ? db.budget.toFixed(2) : '');
       if (v === null) return;
       var n = parseAmount(v);
-      db.budget = isNaN(n) ? 0 : n;
-      save();
-      renderMonth();
+      saveBudget(isNaN(n) ? 0 : n, db.rollover);
     });
 
     if (!db.budget) {
@@ -861,12 +921,15 @@
       return;
     }
 
-    var st = budgetStatus(spent, db.budget, y, m, todayKey());
+    var carry = rolloverCarry(y, m);
+    var effective = db.budget + carry;
+    var st = budgetStatus(spent, effective, y, m, todayKey());
     card.classList.add(st.state);
 
     var top = el('div', 'budget-top');
     var label = el('div');
-    label.appendChild(el('span', 'muted small', 'Budget ' + money(db.budget) + ' · '));
+    label.appendChild(el('span', 'muted small', 'Budget ' + money(effective) +
+      (carry ? ' (' + (carry > 0 ? '+' : '-') + money(Math.abs(carry)) + ' from last month)' : '') + ' · '));
     label.appendChild(edit);
     top.appendChild(label);
     top.appendChild(el('strong', 'budget-state',
@@ -900,6 +963,48 @@
       cell('Spent', money(spent));
     }
     card.appendChild(grid);
+
+    var roll = el('button', 'link-btn', db.rollover ? 'Rollover on - turn off' : 'Turn on rollover');
+    roll.type = 'button';
+    roll.addEventListener('click', function () { saveBudget(db.budget, !db.rollover); });
+    var foot = el('div', 'small'); foot.appendChild(roll);
+    card.appendChild(foot);
+  }
+
+  /* One month, both directions, matching the server: last month's leftover is
+     added and its overspend taken off. Nothing carries from before the budget
+     was first set. */
+  function rolloverCarry(y, m) {
+    if (!db.rollover || !db.budget || !db.budgetSince) return 0;
+    var py = m === 0 ? y - 1 : y, pm = m === 0 ? 11 : m - 1;
+    var prevKey = py + '-' + pad(pm + 1);
+    if (db.budgetSince > prevKey) return 0;
+    var prevSpent = Math.round(sum(inMonth(py, pm)) * 100);
+    return (Math.round(db.budget * 100) - prevSpent) / 100;
+  }
+
+  function applySettings(s) {
+    if (!s) return;
+    db.budget = (s.budget_cents || 0) / 100;
+    db.rollover = !!s.rollover;
+    db.budgetSince = s.budget_since || null;
+    if (s.vapid_public_key) ui.vapidKey = s.vapid_public_key;
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(db)); } catch (e) {}
+    if (ui.view === 'month') renderMonth();
+  }
+
+  function loadSettings() {
+    if (!window.DollarApi || !(window.DollarAuth && window.DollarAuth.isSignedIn())) return;
+    window.DollarApi.call('GET', '/settings').then(applySettings).catch(function () {});
+  }
+
+  function saveBudget(dollars, rollover) {
+    if (!window.DollarApi || navigator.onLine === false) { toast('Changing the budget needs a connection.'); return; }
+    window.DollarApi.call('PUT', '/settings', {
+      budget_cents: Math.round((dollars || 0) * 100),
+      rollover: !!rollover,
+      tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+    }).then(applySettings).catch(function () { toast('Could not save the budget. Try again.'); });
   }
 
   /* ============================ YEAR view ============================ */
@@ -1114,7 +1219,7 @@
   function initAuth() {
     if (!window.DollarAuth) return;
 
-    window.DollarAuth.onChange(applyAuthState);
+    window.DollarAuth.onChange(function (s) { applyAuthState(s); if (s.signedIn) loadSettings(); });
 
     window.DollarAuth.onError(function (msg) {
       var box = $('gateError');
@@ -1235,7 +1340,7 @@
     if (ui.view === 'log') renderLog();
     if (ui.view === 'month') renderMonth();
     if (ui.view === 'year') renderYear();
-    if (ui.view === 'data') { renderData(); renderSubs(); }
+    if (ui.view === 'data') { renderData(); renderSubs(); renderPush(); }
   }
 
   /* ============================ wiring ============================ */
@@ -1255,6 +1360,12 @@
     // --- add sheet ---
     $('fabAdd').addEventListener('click', openSheet);
     $('scanInput').addEventListener('change', onScan);
+    $('pushBtn').addEventListener('click', togglePush);
+    $('pushTest').addEventListener('click', function () {
+      window.DollarApi.call('POST', '/push/test').then(function (r) {
+        toast(r && r.sent ? 'Test sent.' : 'No device registered - turn alerts off and on again.');
+      }).catch(function () { toast('Test failed.'); });
+    });
     Array.prototype.forEach.call(document.querySelectorAll('[data-repeat]'), function (b) {
       b.addEventListener('click', function () { setRepeat(b.getAttribute('data-repeat')); });
     });

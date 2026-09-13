@@ -13,6 +13,7 @@
 
 import { verifyGoogleIdToken, AuthError, usingTestKeys } from './auth.js';
 import { scanReceipt } from './receipt.js';
+import { getSettings, putSettings, subscribePush, unsubscribePush, testPush, checkBudgetAlert } from './budget.js';
 import { generateDue, createSubscription, listSubscriptions, cancelSubscription } from './subs.js';
 import { issueSession, verifySession, revokeSessions, SessionError } from './session.js';
 
@@ -22,7 +23,7 @@ export default {
     ctx.waitUntil(generateDue(env).then(n => console.log('subscriptions: created', n)));
   },
 
-  async fetch(request, env) {
+  async fetch(request, env, execution) {
     const url = new URL(request.url);
 
     // CORS depends on the incoming Origin, so it is computed per request and
@@ -31,6 +32,8 @@ export default {
     // into another's response.
     const headers = corsHeaders(request, env);
     const ctx = {
+      // Work that should finish after the response is sent (e.g. budget alerts).
+      later(p) { if (execution && execution.waitUntil) execution.waitUntil(p.catch(e => console.warn('background:', e && e.message))); },
       json(body, status = 200) {
         return new Response(JSON.stringify(body), {
           status,
@@ -81,6 +84,12 @@ export default {
         await revokeSessions(user.sub, env.DB);
         return ctx.json({ signed_out: true });
       }
+
+      if (url.pathname === '/settings' && request.method === 'GET') return await getSettings(env, ctx, user);
+      if (url.pathname === '/settings' && request.method === 'PUT') return await putSettings(request, env, ctx, user);
+      if (url.pathname === '/push' && request.method === 'POST') return await subscribePush(request, env, ctx, user);
+      if (url.pathname === '/push' && request.method === 'DELETE') return await unsubscribePush(request, env, ctx, user);
+      if (url.pathname === '/push/test' && request.method === 'POST') return await testPush(env, ctx, user);
 
       if (url.pathname === '/subscriptions' && request.method === 'POST') {
         return await createSubscription(request, env, ctx, user);
@@ -182,7 +191,7 @@ function corsHeaders(request, env) {
   else if (origin && allowed.includes(origin.toLowerCase())) allow = origin;
 
   const headers = {
-    'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
+    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type,Authorization',
     'Access-Control-Max-Age': '86400',
     // Responses differ by Origin, so caches must not reuse one for another.
@@ -233,6 +242,7 @@ async function createEntry(request, env, ctx, user) {
   ).bind(id, userId).first();
 
   const inserted = res.meta.changes > 0;
+  if (inserted) ctx.later(checkBudgetAlert(env, userId));
   return ctx.json({ entry: toApi(row), duplicate: !inserted }, inserted ? 201 : 200);
 }
 
