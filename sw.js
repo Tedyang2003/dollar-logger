@@ -12,7 +12,7 @@
  * offline we fall back to whatever was saved last. The whole app is a few KB,
  * so the cost is a few hundred milliseconds on a connection you already have.
  */
-var CACHE = 'dollar-logger-v11';
+var CACHE = 'dollar-logger-v10';
 var ASSETS = [
   './',
   './index.html',
@@ -69,26 +69,4 @@ self.addEventListener('fetch', function (e) {
         });
       })
   );
-});
-
-/* A budget alert from the server. The payload was encrypted to this device's
-   key, and the browser has already decrypted it by the time it arrives here. */
-self.addEventListener('push', function (e) {
-  var msg = {};
-  try { msg = e.data ? e.data.json() : {}; } catch (err) { msg = { body: e.data && e.data.text() }; }
-  e.waitUntil(self.registration.showNotification(msg.title || 'Dollar Logger', {
-    body: msg.body || '',
-    icon: './icons/icon-192.png',
-    badge: './icons/icon-192.png',
-    data: { url: msg.url || './' }
-  }));
-});
-
-self.addEventListener('notificationclick', function (e) {
-  e.notification.close();
-  var url = new URL((e.notification.data && e.notification.data.url) || './', self.registration.scope).href;
-  e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (list) {
-    for (var i = 0; i < list.length; i++) if ('focus' in list[i]) return list[i].focus();
-    return clients.openWindow(url);
-  }));
 });

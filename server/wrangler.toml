@@ -25,9 +25,6 @@ GOOGLE_CLIENT_ID = "530673590797-5m85o2agsr8n5ssol738fsf8u3ebrqo8.apps.googleuse
 # this - so the deployed API never has to trust a dev machine.
 # Lowercase: GitHub serves Pages at the lowercased username.
 ALLOWED_ORIGIN = "https://tedyang2003.github.io"
-# Web Push identity. The public key is public by design; the private key is a secret.
-VAPID_SUBJECT = "https://tedyang2003.github.io/dollar-logger/"
-VAPID_PUBLIC_KEY = "BEEeRjqS-JLY-QdiyOyrmQ9XnlLFmfzE3Tx65HVYTxMFO6J8k4uSeCG-JIas_s64AFvPhw1VItH585QmNGp_LI8"
 
 # The one value worth keeping out of the repo is your own email address:
 #   npx wrangler secret put ALLOWED_EMAILS
