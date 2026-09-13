@@ -15,7 +15,8 @@
     currency: '$',
     budget: 0,     // monthly budget in dollars; 0 = not set (source of truth: server)
     rollover: false,
-    budgetSince: null
+    budgetSince: null,
+    rolloverSince: null
   };
 
   var applyingRemote = false;   // suppresses the sync loop while merging server data
@@ -971,23 +972,27 @@
     card.appendChild(foot);
   }
 
-  /* One month, both directions, matching the server: last month's leftover is
-     added and its overspend taken off. Nothing carries from before the budget
-     was first set. */
+  /* Mirrors the server exactly: one month, both directions, and last month only
+     carries if rollover was already on for all of it. */
   function rolloverCarry(y, m) {
-    if (!db.rollover || !db.budget || !db.budgetSince) return 0;
+    if (!db.rollover || !db.budget || !db.rolloverSince) return 0;
     var py = m === 0 ? y - 1 : y, pm = m === 0 ? 11 : m - 1;
     var prevKey = py + '-' + pad(pm + 1);
-    if (db.budgetSince > prevKey) return 0;
+    if (db.rolloverSince > prevKey) return 0;
     var prevSpent = Math.round(sum(inMonth(py, pm)) * 100);
     return (Math.round(db.budget * 100) - prevSpent) / 100;
   }
 
   function applySettings(s) {
     if (!s) return;
+    try { applySettingsUnsafe(s); } catch (e) { console.warn('settings not applied', e); }
+  }
+
+  function applySettingsUnsafe(s) {
     db.budget = (s.budget_cents || 0) / 100;
     db.rollover = !!s.rollover;
     db.budgetSince = s.budget_since || null;
+    db.rolloverSince = s.rollover_since || null;
     if (s.vapid_public_key) ui.vapidKey = s.vapid_public_key;
     try { localStorage.setItem(STORE_KEY, JSON.stringify(db)); } catch (e) {}
     if (ui.view === 'month') renderMonth();

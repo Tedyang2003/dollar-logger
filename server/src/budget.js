@@ -25,11 +25,15 @@ async function settingsFor(env, userId) {
 }
 
 /* One month of rollover, both directions: last month's leftover is added,
-   last month's overspend is taken off. Nothing carries from before the budget
-   existed - spending in a month you had no budget is not "under budget". */
-export function effectiveBudget(baseCents, rollover, budgetSince, month, prevSpentCents) {
+   last month's overspend is taken off.
+
+   The stopper: last month only carries if rollover was ALREADY on for all of
+   it. Turning rollover on in September means September has no carry and the
+   first carry is September into October - so an August you never logged
+   cannot hand September a whole unspent budget. */
+export function effectiveBudget(baseCents, rollover, rolloverSince, month, prevSpentCents) {
   const prev = prevMonth(month);
-  const carry = rollover && budgetSince && budgetSince <= prev ? baseCents - prevSpentCents : 0;
+  const carry = rollover && rolloverSince && rolloverSince <= prev ? baseCents - prevSpentCents : 0;
   return { effective: baseCents + carry, carry };
 }
 
@@ -37,7 +41,7 @@ export async function budgetFor(env, userId, month) {
   const s = await settingsFor(env, userId);
   if (!s || !s.budget_cents) return null;
   const prevSpent = s.rollover ? await spentIn(env, userId, prevMonth(month)) : 0;
-  const { effective, carry } = effectiveBudget(s.budget_cents, !!s.rollover, s.budget_since, month, prevSpent);
+  const { effective, carry } = effectiveBudget(s.budget_cents, !!s.rollover, s.rollover_since, month, prevSpent);
   return { base: s.budget_cents, carry, effective, rollover: !!s.rollover, tz: s.tz };
 }
 
@@ -81,6 +85,7 @@ export async function getSettings(env, ctx, user) {
     budget_cents: s ? s.budget_cents : 0,
     rollover: s ? !!s.rollover : false,
     budget_since: s ? s.budget_since : null,
+    rollover_since: s ? s.rollover_since : null,
     current: b ? { month, carry_cents: b.carry, effective_cents: b.effective } : null,
     vapid_public_key: env.VAPID_PUBLIC_KEY || null
   });
@@ -100,8 +105,8 @@ export async function putSettings(request, env, ctx, user) {
 
   await env.DB.prepare('INSERT OR IGNORE INTO users (id, email) VALUES (?, ?)').bind(user.sub, user.email).run();
   await env.DB.prepare(
-    `INSERT INTO user_settings (user_id, budget_cents, rollover, budget_since, tz, updated_at)
-     VALUES (?, ?, ?, ?, ?, datetime('now'))
+    `INSERT INTO user_settings (user_id, budget_cents, rollover, budget_since, rollover_since, tz, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
      ON CONFLICT(user_id) DO UPDATE SET
        budget_cents = excluded.budget_cents,
        rollover = excluded.rollover,
@@ -109,8 +114,12 @@ export async function putSettings(request, env, ctx, user) {
        -- keep the original start month; clear it if the budget is removed
        budget_since = CASE WHEN excluded.budget_cents = 0 THEN NULL
                            ELSE COALESCE(user_settings.budget_since, excluded.budget_since) END,
+       -- stamped when rollover switches on; turning it off and on again restarts it
+       rollover_since = CASE WHEN excluded.rollover = 0 THEN NULL
+                             WHEN user_settings.rollover = 1 THEN user_settings.rollover_since
+                             ELSE excluded.rollover_since END,
        updated_at = datetime('now')`
-  ).bind(user.sub, budget, b.rollover ? 1 : 0, budget ? month : null, tz).run();
+  ).bind(user.sub, budget, b.rollover ? 1 : 0, budget ? month : null, b.rollover ? month : null, tz).run();
 
   // A budget lowered below what is already spent should alert now, not on the next purchase.
   await checkBudgetAlert(env, user.sub);
