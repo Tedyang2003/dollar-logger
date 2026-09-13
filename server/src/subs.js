@@ -1,5 +1,7 @@
 /* Subscriptions: recurring purchases the server logs on a schedule. */
 
+import { checkBudgetAlert } from './budget.js';
+
 const INTERVALS = ['weekly', 'monthly', 'yearly'];
 const MAX_PER_RUN = 400;   // a long-dormant subscription catches up in chunks
 
@@ -58,6 +60,7 @@ export async function generateDue(env, now = new Date()) {
   ).all();
 
   let created = 0;
+  const touched = new Set();
 
   for (const s of results || []) {
     const today = localToday(s.tz, now);
@@ -78,7 +81,7 @@ export async function generateDue(env, now = new Date()) {
       ).bind('sub-' + s.id + '-' + date, s.user_id, date, s.amount_cents,
              s.category, s.item, s.merchant, s.id).run();
 
-      if (res.meta.changes > 0) created++;
+      if (res.meta.changes > 0) { created++; touched.add(s.user_id); }
       n++;
     }
 
@@ -87,6 +90,8 @@ export async function generateDue(env, now = new Date()) {
         .bind(n, s.id).run();
     }
   }
+  // New charges count toward the budget like any purchase.
+  for (const u of touched) await checkBudgetAlert(env, u);
   return created;
 }
 
