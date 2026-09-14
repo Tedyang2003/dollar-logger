@@ -5,7 +5,9 @@
  * the user saves it through the normal POST /entries path.
  */
 
-const MODEL = '@cf/meta/llama-3.2-11b-vision-instruct';
+const MODEL = '@cf/qwen/qwen3.8-27b';
+// Kept as a fallback: if Qwen is unavailable the scan still works, just less accurately.
+const FALLBACK = '@cf/meta/llama-3.2-11b-vision-instruct';
 const MAX_BYTES = 4 * 1024 * 1024;
 
 const PROMPT = `You are transcribing a photo of a shop receipt.
@@ -31,18 +33,18 @@ export async function scanReceipt(request, env, ctx) {
   if (buf.byteLength === 0) return ctx.json({ error: 'empty image' }, 400);
   if (buf.byteLength > MAX_BYTES) return ctx.json({ error: 'image too large (max 4 MB)' }, 413);
 
-  const bytes = [...new Uint8Array(buf)];
+  const bytes = new Uint8Array(buf);
 
   let res;
   try {
-    res = await runModel(env, bytes);
+    res = await runModel(env, bytes, type);
   } catch (err) {
     console.error('vision model failed:', err && err.message);
     // Out of free quota, model down, etc. The phone falls back to typing.
     return ctx.json({ error: 'scan_unavailable' }, 503);
   }
 
-  const draft = parseDraft(res && res.response);
+  const draft = parseDraft(res);
   if (!draft) {
     // Log what the model actually said, so "unreadable" is diagnosable.
     console.warn('unparseable model reply:', JSON.stringify(res).slice(0, 800));
@@ -52,16 +54,42 @@ export async function scanReceipt(request, env, ctx) {
   return ctx.json({ draft });
 }
 
-/* Meta's licence for Llama 3.2 Vision must be accepted once per Cloudflare
-   account, by sending the literal prompt "agree". Do that automatically the
-   first time the model refuses, then retry once. */
-async function runModel(env, bytes) {
+/* Qwen takes OpenAI-style chat messages with the image as a data URI, and
+   answers in choices[0].message.content. Its "thinking" mode is switched off:
+   for copying text off a receipt it gave the same answer with a fraction of
+   the output tokens. If Qwen fails, fall back to Llama so scanning survives. */
+async function runModel(env, bytes, type) {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  const dataUri = 'data:' + type + ';base64,' + btoa(bin);
+
   try {
-    return await env.AI.run(MODEL, { image: bytes, prompt: PROMPT, max_tokens: 256 });
+    const r = await env.AI.run(MODEL, {
+      messages: [{ role: 'user', content: [
+        { type: 'text', text: PROMPT },
+        { type: 'image_url', image_url: { url: dataUri } }
+      ] }],
+      max_tokens: 600,
+      chat_template_kwargs: { enable_thinking: false }
+    });
+    const msg = r && r.choices && r.choices[0] && r.choices[0].message;
+    if (msg && msg.content) return msg.content;
+    throw new Error('empty reply');
+  } catch (err) {
+    console.warn('qwen failed, falling back to llama:', err && err.message);
+    return await runLlama(env, [...bytes]);
+  }
+}
+
+async function runLlama(env, bytes) {
+  try {
+    const r = await env.AI.run(FALLBACK, { image: bytes, prompt: PROMPT, max_tokens: 256 });
+    return r && r.response;
   } catch (err) {
     if (!/agree/i.test(String(err && err.message))) throw err;
-    await env.AI.run(MODEL, { prompt: 'agree' });
-    return await env.AI.run(MODEL, { image: bytes, prompt: PROMPT, max_tokens: 256 });
+    await env.AI.run(FALLBACK, { prompt: 'agree' });
+    const r = await env.AI.run(FALLBACK, { image: bytes, prompt: PROMPT, max_tokens: 256 });
+    return r && r.response;
   }
 }
 
